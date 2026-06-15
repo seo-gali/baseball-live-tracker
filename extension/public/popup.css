@@ -214,3 +214,19 @@ body {
   background: #888;
   flex-shrink: 0;
 }
+
+.status-dot.connecting {
+  background: #ffff44;
+}
+
+.status-dot.connected {
+  background: #4dff4d;
+}
+
+.status-dot.disconnected {
+  background: #888;
+}
+
+.status-dot.error {
+  background: #ff4444;
+}

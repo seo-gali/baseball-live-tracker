@@ -85,7 +85,10 @@ baseball-live-tracker
 │  │  ├─ storage
 │  │  └─ notifications
 │  ├─ public
-│  │  └─ manifest.json
+│  │  ├─ manifest.json
+│  │  ├─ popup.html
+│  │  ├─ popup.css
+│  │  └─ popup.js
 │  ├─ package.json
 │  └─ tsconfig.json
 │
@@ -127,7 +130,82 @@ README.md
 
 ---
 
-## 이벤트 예시
+## 이벤트 데이터 모델
+
+Backend에서 생성한 경기 이벤트는 WebSocket을 통해 Chrome Extension으로 전달된다.
+
+Phase 3에서는 Mock WebSocket Server가 아래 구조를 가진 Mock 경기 이벤트를 Popup으로 전송한다. 이후 Kafka Producer / Consumer를 추가할 때도 동일한 이벤트 모델을 기준으로 메시지를 발행하고 소비한다.
+
+### 이닝 구분
+
+```ts
+// TOP: 초, BOTTOM: 말
+export type InningHalf = "TOP" | "BOTTOM";
+```
+
+### 이벤트 타입
+
+```ts
+// 백엔드 내부에서 사용할 경기 이벤트 타입 목록
+export type GameEventType =
+  | "GAME_START"
+  | "GAME_END"
+  | "SCORE"
+  | "HOME_RUN"
+  | "OUT_COUNT_CHANGE"
+  | "PITCHER_CHANGE"
+  | "BATTER_CHANGE"
+  | "INNING_CHANGE"
+  | "ERROR";
+```
+
+| 이벤트 타입             | 설명        |
+| ------------------ | --------- |
+| `GAME_START`       | 경기 시작     |
+| `GAME_END`         | 경기 종료     |
+| `SCORE`            | 득점        |
+| `HOME_RUN`         | 홈런        |
+| `OUT_COUNT_CHANGE` | 아웃카운트 변경  |
+| `PITCHER_CHANGE`   | 투수 교체     |
+| `BATTER_CHANGE`    | 타자 교체     |
+| `INNING_CHANGE`    | 이닝 변경     |
+| `ERROR`            | 이벤트 처리 오류 |
+
+### 경기 이벤트 구조
+
+```ts
+// WebSocket으로 Extension에 전달할 경기 이벤트 표준 구조
+export type GameEvent = {
+  gameId: string;
+  inning: number;
+  inningHalf: InningHalf;
+  homeTeam: string;
+  awayTeam: string;
+  homeScore: number;
+  awayScore: number;
+  outCount: number;
+  eventType: GameEventType;
+  message: string;
+  timestamp: string;
+};
+```
+
+| 필드           | 설명                            |
+| ------------ | ----------------------------- |
+| `gameId`     | 경기 식별자                        |
+| `inning`     | 현재 이닝                         |
+| `inningHalf` | 초/말 구분                        |
+| `homeTeam`   | 홈 팀                           |
+| `awayTeam`   | 원정 팀                          |
+| `homeScore`  | 홈 팀 점수                        |
+| `awayScore`  | 원정 팀 점수                       |
+| `outCount`   | 현재 아웃카운트                      |
+| `eventType`  | 경기 이벤트 타입                     |
+| `message`    | Chrome Extension에 표시할 사용자 메시지 |
+| `timestamp`  | 이벤트 생성 시각                     |
+
+
+#### 이벤트 예시
 
 ```json
 {
@@ -138,6 +216,7 @@ README.md
   "awayTeam": "LG",
   "homeScore": 3,
   "awayScore": 5,
+  "outCount": 1,
   "eventType": "SCORE",
   "message": "LG 7회초 1득점",
   "timestamp": "2026-06-12T10:21:00Z"
@@ -150,7 +229,7 @@ README.md
 
 * [x] Phase 1. 프로젝트 초기 구성
 * [x] Phase 2. Chrome Extension 기본 UI
-* [ ] Phase 3. Mock WebSocket Server
+* [x] Phase 3. Mock WebSocket Server
 * [ ] Phase 4. Mock 경기 이벤트 생성
 * [ ] Phase 5. Kafka Producer / Consumer
 * [ ] Phase 6. WebSocket 실시간 이벤트 반영
