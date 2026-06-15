@@ -230,7 +230,7 @@ export type GameEvent = {
 * [x] Phase 1. 프로젝트 초기 구성
 * [x] Phase 2. Chrome Extension 기본 UI
 * [x] Phase 3. Mock WebSocket Server
-* [ ] Phase 4. Mock 경기 이벤트 생성
+* [x] Phase 4. Mock 경기 이벤트 생성
 * [ ] Phase 5. Kafka Producer / Consumer
 * [ ] Phase 6. WebSocket 실시간 이벤트 반영
 * [ ] Phase 7. KBO 데이터 출처 조사 및 수집 범위 확정
