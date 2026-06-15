@@ -12,17 +12,22 @@ Baseball Live Tracker는 KBO 경기 데이터를 수집하고, Kafka 기반 이�
 
 ---
 
-## 구현 예정 기능
+## 구현 기능 / 예정 기능
+
+### 구현 완료
 
 * Mock 야구 경기 이벤트 생성
-* KBO 공식 경기 데이터 연동
-* 경기 일정 및 경기 상태 수집
 * Kafka Producer를 통한 경기 이벤트 발행
 * Kafka Consumer를 통한 이벤트 처리
 * WebSocket 기반 실시간 이벤트 전송
 * Chrome Extension Popup UI
 * 응원 팀 선택
 * 실시간 스코어 표시
+
+### 구현 예정
+
+* KBO 공식 경기 데이터 연동
+* 경기 일정 및 경기 상태 수집
 * 득점, 홈런, 선수 교체 등 주요 이벤트 알림
 * 최근 경기 이벤트 로그 저장
 
@@ -58,6 +63,22 @@ WebSocket Server
 Chrome Extension
     ↓
 Popup / Notification
+```
+
+### 현재 Mock 기반 검증 흐름
+
+```text
+Mock Game Event Generator
+    ↓
+Kafka Producer
+    ↓
+baseball.game.events Topic
+    ↓
+Kafka Consumer
+    ↓
+WebSocket Server
+    ↓
+Chrome Extension Popup
 ```
 
 ---
@@ -136,7 +157,7 @@ README.md
 
 Backend에서 생성한 경기 이벤트는 WebSocket을 통해 Chrome Extension으로 전달된다.
 
-Phase 3에서는 Mock WebSocket Server가 아래 구조를 가진 Mock 경기 이벤트를 Popup으로 전송한다. 이후 Kafka Producer / Consumer를 추가할 때도 동일한 이벤트 모델을 기준으로 메시지를 발행하고 소비한다.
+Phase 6 기준으로 Mock 경기 이벤트는 Kafka Producer를 통해 `baseball.game.events` Topic에 발행된다. Kafka Consumer는 해당 이벤트를 소비한 뒤 WebSocket Server로 전달하고, WebSocket Server는 동일한 `GameEvent` 구조를 Chrome Extension Popup에 broadcast한다.
 
 ### 이닝 구분
 
@@ -241,9 +262,9 @@ baseball.game.events Topic
 Kafka Consumer
 ```
 
-Phase 5에서는 Kafka Producer / Consumer 자체 동작만 검증한다.
+Phase 5에서는 Kafka Producer / Consumer 자체 동작만 검증했다.
 
-Consumer가 소비한 이벤트를 WebSocket Server로 전달하고 Chrome Extension Popup에 반영하는 작업은 Phase 6에서 진행한다.
+Phase 6에서는 Consumer가 소비한 이벤트를 WebSocket Server로 전달하고, WebSocket Server가 연결된 Chrome Extension Popup에 `GAME_EVENT` 메시지를 broadcast하도록 연결했다.
 
 ### Kafka Topic
 
@@ -296,7 +317,7 @@ docker exec -it baseball-live-tracker-kafka /opt/kafka/bin/kafka-topics.sh --boo
 ### Kafka Producer / Consumer 실행
 
 ```powershell
-cd ./baseball-live-tracker\backend
+cd ./baseball-live-tracker/backend
 
 pnpm dev:kafka
 ```
@@ -318,7 +339,7 @@ pnpm dev:kafka
 docker exec -it baseball-live-tracker-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic baseball.game.events
 ```
 
-정상 기준:
+#### 정상 기준
 
 ```text
 Topic: baseball.game.events
@@ -332,26 +353,124 @@ ReplicationFactor: 1
 docker exec -it baseball-live-tracker-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic baseball.game.events --from-beginning
 ```
 
-정상 기준:
+#### 정상 기준
 
-```text
-GAME_START
-OUT_COUNT_CHANGE
-SCORE
-INNING_CHANGE
-HOME_RUN
-PITCHER_CHANGE
-GAME_END
+Kafka CLI Consumer는 Kafka message value를 그대로 출력하므로 `GameEvent` JSON 문자열이 표시된다.
+
+```json
+{"gameId":"2026-06-15-LG-DOO","inning":1,"inningHalf":"TOP","homeTeam":"DOO","awayTeam":"LG","homeScore":0,"awayScore":0,"outCount":0,"eventType":"GAME_START","message":"경기 시작: LG vs DOO","timestamp":"..."}
 ```
 
 ### Kafka 종료
 
 ```powershell
-cd D:\01_Programming\03_NodeJS\baseball-live-tracker
+cd ./baseball-live-tracker
 
 docker compose -f infra/docker-compose.yml down
 ```
 
+---
+
+## WebSocket 실시간 이벤트 반영
+
+Phase 6에서는 Kafka Consumer가 소비한 경기 이벤트를 WebSocket Server로 전달하고, WebSocket Server가 Chrome Extension Popup으로 이벤트를 실시간 broadcast한다.
+
+```text
+Mock Game Event Generator
+    ↓
+Kafka Producer
+    ↓
+baseball.game.events Topic
+    ↓
+Kafka Consumer
+    ↓
+WebSocket Server
+    ↓
+Chrome Extension Popup
+```
+
+## 실시간 파이프라인 실행
+
+### 1. 터미널 1에서 Kafka 실행
+
+```powershell
+cd ./baseball-live-tracker
+
+docker compose -f infra/docker-compose.yml up -d
+```
+
+### 2. 터미널 2에서 backend 실행
+
+```powershell
+cd ./baseball-live-tracker/backend
+
+pnpm dev
+```
+
+#### 정상 로그 예시
+
+```
+[websocket] server listening on ws://localhost:4000
+[kafka-admin] topic created: baseball.game.events
+[kafka-consumer] connected. groupId=baseball-live-tracker-game-event-consumer
+[kafka-consumer] subscribed. topic=baseball.game.events
+[kafka-producer] connected
+[kafka-producer] GAME_START: 경기 시작: LG vs DOO
+[mock-kafka-producer] started. interval=3000ms
+[backend] realtime pipeline started
+[backend] flow: Mock Producer → Kafka → Consumer → WebSocket → Popup
+```
+
+### 3. Chrome Extension Popup을 열면 WebSocket client가 연결
+
+```
+[websocket] client connected: ...
+[websocket] client message from ...: { type: 'SUBSCRIBE_TEAM', payload: { team: 'LG' } }
+```
+
+### 4. Kafka 이벤트가 Consumer를 거쳐 WebSocket으로 전달되면 로그 출력
+
+```
+[kafka-consumer] baseball.game.events[0|2] SCORE: LG 1회초 선취 득점
+[realtime] consumed SCORE: LG 1회초 선취 득점. websocketClients=1
+[websocket] broadcast SCORE: LG 1회초 선취 득점. clients=1
+```
+
+### 5. Chrome Extension 확인
+
+1. Chrome 주소창에 chrome://extensions 입력
+2. Baseball Live Tracker 확장 프로그램 새로고침
+3. Chrome Toolbar에서 확장 프로그램 아이콘 클릭
+4. Popup에서 WebSocket 연결 완료 확인
+5. 점수, 이닝, 아웃카운트, 최근 이벤트 로그가 실시간 갱신되는지 확인
+
+#### 정상 기준
+- WebSocket 연결 상태가 표시된다.
+- Kafka를 거친 이벤트가 Popup 최근 이벤트 로그에 표시된다.
+- 경기 점수, 현재 이닝, 아웃카운트가 이벤트 payload 기준으로 갱신된다.
+- Popup을 닫았다가 다시 열면 WebSocket client가 새로 연결된다.
+
+### 6. 실시간 파이프라인 종료
+
+backend 터미널에서 `Ctrl + C`를 누른다.
+
+#### 정상 로그
+
+```
+[backend] shutting down. signal=SIGINT
+[kafka-producer] disconnected
+[mock-kafka-producer] stopped
+[kafka-consumer] disconnected
+[websocket] server closed
+```
+
+### 7. Kafka 컨테이너를 종료
+
+```powershell
+cd ./baseball-live-tracker
+
+docker compose -f infra/docker-compose.yml down
+```
 
 ---
 
@@ -362,7 +481,7 @@ docker compose -f infra/docker-compose.yml down
 * [x] Phase 3. Mock WebSocket Server
 * [x] Phase 4. Mock 경기 이벤트 생성
 * [x] Phase 5. Kafka Producer / Consumer
-* [ ] Phase 6. WebSocket 실시간 이벤트 반영
+* [x] Phase 6. WebSocket 실시간 이벤트 반영
 * [ ] Phase 7. KBO 데이터 출처 조사 및 수집 범위 확정
 * [ ] Phase 8. KBO 경기 데이터 Collector 구현
 * [ ] Phase 9. 알림 / 팀 즐겨찾기
