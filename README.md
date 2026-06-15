@@ -276,7 +276,7 @@ Kafka message key는 `gameId`를 사용한다.
 ### 로컬 Kafka 실행
 
 ```powershell
-cd D:\01_Programming\03_NodeJS\baseball-live-tracker
+cd ./baseball-live-tracker
 
 docker compose -f infra/docker-compose.yml up -d
 ```
@@ -296,7 +296,7 @@ docker exec -it baseball-live-tracker-kafka /opt/kafka/bin/kafka-topics.sh --boo
 ### Kafka Producer / Consumer 실행
 
 ```powershell
-cd D:\01_Programming\03_NodeJS\baseball-live-tracker\backend
+cd ./baseball-live-tracker\backend
 
 pnpm dev:kafka
 ```
