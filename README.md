@@ -32,7 +32,8 @@ Baseball Live Tracker는 KBO 경기 데이터를 수집하고, Kafka 기반 이�
 
 * Node.js
 * TypeScript
-* Kafka
+* Apache Kafka
+* KafkaJS
 * WebSocket
 * Chrome Extension Manifest V3
 * Docker Compose
@@ -73,6 +74,7 @@ baseball-live-tracker
 │  │  ├─ producer
 │  │  ├─ consumer
 │  │  ├─ events
+│  │  ├─ kafka
 │  │  └─ config
 │  ├─ test
 │  ├─ package.json
@@ -225,13 +227,141 @@ export type GameEvent = {
 
 ---
 
+## Kafka Producer / Consumer
+
+Phase 5에서는 Mock 경기 이벤트를 Kafka Topic에 발행하고, Consumer가 해당 Topic에서 이벤트를 소비하는 흐름을 구현한다.
+
+```text
+Mock Game Event Generator
+    ↓
+Kafka Producer
+    ↓
+baseball.game.events Topic
+    ↓
+Kafka Consumer
+```
+
+Phase 5에서는 Kafka Producer / Consumer 자체 동작만 검증한다.
+
+Consumer가 소비한 이벤트를 WebSocket Server로 전달하고 Chrome Extension Popup에 반영하는 작업은 Phase 6에서 진행한다.
+
+### Kafka Topic
+
+```text
+baseball.game.events
+```
+
+### Kafka 메시지 구조
+
+Kafka message value는 기존 `GameEvent` 모델을 JSON 문자열로 직렬화한 값이다.
+
+```json
+{
+  "gameId": "2026-06-15-LG-DOO",
+  "inning": 1,
+  "inningHalf": "TOP",
+  "homeTeam": "DOO",
+  "awayTeam": "LG",
+  "homeScore": 0,
+  "awayScore": 0,
+  "outCount": 0,
+  "eventType": "GAME_START",
+  "message": "경기 시작: LG vs DOO",
+  "timestamp": "2026-06-15T13:58:28.866Z"
+}
+```
+
+Kafka message key는 `gameId`를 사용한다.
+
+### 로컬 Kafka 실행
+
+```powershell
+cd D:\01_Programming\03_NodeJS\baseball-live-tracker
+
+docker compose -f infra/docker-compose.yml up -d
+```
+
+Kafka 컨테이너 상태 확인:
+
+```powershell
+docker ps
+```
+
+Topic 목록 확인:
+
+```powershell
+docker exec -it baseball-live-tracker-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+```
+
+### Kafka Producer / Consumer 실행
+
+```powershell
+cd D:\01_Programming\03_NodeJS\baseball-live-tracker\backend
+
+pnpm dev:kafka
+```
+
+정상 동작 시 Producer가 Mock 경기 이벤트를 발행하고, Consumer가 같은 이벤트를 소비한다.
+
+```text
+[kafka-admin] topic created: baseball.game.events
+[kafka-consumer] connected. groupId=baseball-live-tracker-game-event-consumer
+[kafka-consumer] subscribed. topic=baseball.game.events
+[kafka-producer] connected
+[kafka-producer] GAME_START: 경기 시작: LG vs DOO
+[kafka-consumer] baseball.game.events[0|0] GAME_START: 경기 시작: LG vs DOO
+```
+
+### Kafka Topic 상세 확인
+
+```powershell
+docker exec -it baseball-live-tracker-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic baseball.game.events
+```
+
+정상 기준:
+
+```text
+Topic: baseball.game.events
+PartitionCount: 1
+ReplicationFactor: 1
+```
+
+### Kafka CLI Consumer 확인
+
+```powershell
+docker exec -it baseball-live-tracker-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic baseball.game.events --from-beginning
+```
+
+정상 기준:
+
+```text
+GAME_START
+OUT_COUNT_CHANGE
+SCORE
+INNING_CHANGE
+HOME_RUN
+PITCHER_CHANGE
+GAME_END
+```
+
+### Kafka 종료
+
+```powershell
+cd D:\01_Programming\03_NodeJS\baseball-live-tracker
+
+docker compose -f infra/docker-compose.yml down
+```
+
+
+---
+
 ## 진행 단계
 
 * [x] Phase 1. 프로젝트 초기 구성
 * [x] Phase 2. Chrome Extension 기본 UI
 * [x] Phase 3. Mock WebSocket Server
 * [x] Phase 4. Mock 경기 이벤트 생성
-* [ ] Phase 5. Kafka Producer / Consumer
+* [x] Phase 5. Kafka Producer / Consumer
 * [ ] Phase 6. WebSocket 실시간 이벤트 반영
 * [ ] Phase 7. KBO 데이터 출처 조사 및 수집 범위 확정
 * [ ] Phase 8. KBO 경기 데이터 Collector 구현

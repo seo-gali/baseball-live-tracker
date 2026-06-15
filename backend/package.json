@@ -4,9 +4,11 @@
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dev:kafka": "tsx src/kafkaDemo.ts"
   },
   "dependencies": {
+    "kafkajs": "^2.2.4",
     "ws": "^8.21.0"
   },
   "devDependencies": {
