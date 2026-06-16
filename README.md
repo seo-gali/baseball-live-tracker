@@ -157,7 +157,9 @@ README.md
 
 Backend에서 생성한 경기 이벤트는 WebSocket을 통해 Chrome Extension으로 전달된다.
 
-Phase 6 기준으로 Mock 경기 이벤트는 Kafka Producer를 통해 `baseball.game.events` Topic에 발행된다. Kafka Consumer는 해당 이벤트를 소비한 뒤 WebSocket Server로 전달하고, WebSocket Server는 동일한 `GameEvent` 구조를 Chrome Extension Popup에 broadcast한다.
+Mock 경기 이벤트는 Kafka Producer를 통해 `baseball.game.events` Topic에 발행된다.    
+Kafka Consumer는 해당 이벤트를 소비한 뒤 WebSocket Server로 전달하고,    
+WebSocket Server는 동일한 `GameEvent` 구조를 Chrome Extension Popup에 broadcast한다.
 
 ### 이닝 구분
 
@@ -250,7 +252,7 @@ export type GameEvent = {
 
 ## Kafka Producer / Consumer
 
-Phase 5에서는 Mock 경기 이벤트를 Kafka Topic에 발행하고, Consumer가 해당 Topic에서 이벤트를 소비하는 흐름을 구현한다.
+Mock 경기 이벤트를 Kafka Topic에 발행하고, Consumer가 해당 Topic에서 이벤트를 소비하는 흐름 구현
 
 ```text
 Mock Game Event Generator
@@ -261,10 +263,6 @@ baseball.game.events Topic
     ↓
 Kafka Consumer
 ```
-
-Phase 5에서는 Kafka Producer / Consumer 자체 동작만 검증했다.
-
-Phase 6에서는 Consumer가 소비한 이벤트를 WebSocket Server로 전달하고, WebSocket Server가 연결된 Chrome Extension Popup에 `GAME_EVENT` 메시지를 broadcast하도록 연결했다.
 
 ### Kafka Topic
 
@@ -373,7 +371,7 @@ docker compose -f infra/docker-compose.yml down
 
 ## WebSocket 실시간 이벤트 반영
 
-Phase 6에서는 Kafka Consumer가 소비한 경기 이벤트를 WebSocket Server로 전달하고, WebSocket Server가 Chrome Extension Popup으로 이벤트를 실시간 broadcast한다.
+Kafka Consumer가 소비한 경기 이벤트를 WebSocket Server로 전달하고, WebSocket Server가 Chrome Extension Popup으로 이벤트를 실시간 broadcast한다.
 
 ```text
 Mock Game Event Generator
@@ -474,6 +472,82 @@ docker compose -f infra/docker-compose.yml down
 
 ---
 
+## KBO 데이터 출처 및 수집 범위
+
+### 최종 수집 출처
+
+```text
+https://www.koreabaseball.com/Schedule/ScoreBoard.aspx
+```
+
+### 수집 방식
+- KBO 공식 스코어보드 HTML을 주기적으로 조회
+- 이전 경기 상태 snapshot과 현재 snapshot을 비교해 이벤트 생성
+
+```text
+KBO 공식 스코어보드
+    ↓
+KboScoreboardCollector
+    ↓
+KboScoreboardParser
+    ↓
+KboGameSnapshot
+    ↓
+KboGameEventFactory
+    ↓
+Kafka Producer
+```
+
+### 수집 대상
+
+스코어보드 HTML에서 확인 가능한 항목만 수집
+
+```text
+- 경기 날짜
+- 경기 시간
+- 구장
+- 원정 팀
+- 홈 팀
+- 원정 팀 점수
+- 홈 팀 점수
+- 경기 상태
+- 이닝별 점수
+- R / H / E / B
+- 승리 투수 텍스트
+- 패전 투수 텍스트
+- 세이브 투수 텍스트
+```
+
+### 이벤트 변환 범위
+
+```text
+- GAME_START
+- GAME_END
+- SCORE
+- ERROR
+```
+
+### 수집 제외 기준
+
+```text
+- 네이버 스포츠 수집 제외
+- KBO 모바일 사이트 수집 제외
+- KBO 영문 사이트 수집 제외
+- KBO 게임센터 수집 제외
+- KBO 문자중계 수집 제외
+- /ws/ 내부 경로 직접 호출 제외
+- 로그인 기반 데이터 수집 제외
+- 영상, 이미지, 로고, 선수 사진 수집 제외
+- 전체 시즌 데이터 대량 저장 제외
+```
+
+### 구현 기준
+
+- 스코어보드에서 확인되지 않는 값은 임의로 만들지 않는다. 
+- 현재 이닝, 초/말, 아웃카운트처럼 스코어보드에서 안정적으로 확인할 수 없는 필드는 `null`로 처리하거나 Popup에서 `-`로 표시한다.
+
+---
+
 ## 진행 단계
 
 * [x] Phase 1. 프로젝트 초기 구성
@@ -482,7 +556,7 @@ docker compose -f infra/docker-compose.yml down
 * [x] Phase 4. Mock 경기 이벤트 생성
 * [x] Phase 5. Kafka Producer / Consumer
 * [x] Phase 6. WebSocket 실시간 이벤트 반영
-* [ ] Phase 7. KBO 데이터 출처 조사 및 수집 범위 확정
+* [x] Phase 7. KBO 데이터 출처 조사 및 수집 범위 확정
 * [ ] Phase 8. KBO 경기 데이터 Collector 구현
 * [ ] Phase 9. 알림 / 팀 즐겨찾기
 * [ ] Phase 10. Docker Compose 구성
