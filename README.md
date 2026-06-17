@@ -132,24 +132,22 @@ baseball-live-tracker
 
 ## 디렉터리 역할
 
-```text
-backend
+### backend
 - KBO 스코어보드 / 팀 순위 데이터 수집
 - 경기 이벤트 모델 관리
 - Kafka Producer / Consumer
 - WebSocket Server
 
-extension
+### extension
 - Chrome Extension Popup UI
 - WebSocket 메시지 수신
 - 선택 팀 경기 정보 표시
 - 선택 팀 순위 / 시즌 성적 / 승률 / 게임차 표시
 - WebSocket 연결 상태 표시
 
-infra
+### infra
 - Kafka 로컬 실행 환경
 - Docker Compose 구성
-```
 
 ---
 
@@ -265,7 +263,6 @@ KBO_SNAPSHOT
 
 Popup에서는 아래 항목을 표시한다.
 
-```text
 - WebSocket 연결 상태
 - 응원 팀 선택
 - 경기 상태
@@ -277,7 +274,6 @@ Popup에서는 아래 항목을 표시한다.
 - 선택 팀 순위
 - 시즌 성적
 - 승률 / 게임차
-```
 
 `GAME_EVENT`는 선택 팀 경기의 실시간 점수 갱신에 사용하고, `KBO_SNAPSHOT`은 Popup이 열렸을 때 현재 경기 정보와 순위 정보를 채우는 데 사용한다.
 
@@ -298,7 +294,6 @@ https://www.koreabaseball.com/Record/TeamRank/TeamRankDaily.aspx
 
 ### 스코어보드 수집 대상
 
-```text
 - 경기 날짜
 - 경기 시간
 - 구장
@@ -312,11 +307,9 @@ https://www.koreabaseball.com/Record/TeamRank/TeamRankDaily.aspx
 - 승리 투수 텍스트
 - 패전 투수 텍스트
 - 세이브 투수 텍스트
-```
 
 ### 팀 순위 수집 대상
 
-```text
 - 기준일
 - 순위
 - 팀명
@@ -330,11 +323,9 @@ https://www.koreabaseball.com/Record/TeamRank/TeamRankDaily.aspx
 - 연속
 - 홈 성적
 - 방문 성적
-```
 
 ### 수집 기준
 
-```text
 - 로그인 없이 접근 가능한 공개 HTML만 사용한다.
 - 내부 API나 /ws/ 경로를 직접 호출하지 않는다.
 - 네이버 스포츠, KBO 모바일, KBO 영문 사이트는 수집하지 않는다.
@@ -342,7 +333,6 @@ https://www.koreabaseball.com/Record/TeamRank/TeamRankDaily.aspx
 - 영상, 이미지, 로고, 선수 사진은 수집하지 않는다.
 - 전체 시즌 데이터를 대량 저장하지 않는다.
 - 학습용 로컬 프로젝트 범위에서만 사용한다.
-```
 
 ---
 
@@ -400,13 +390,11 @@ pnpm dev
 
 ### 3. Chrome Extension 확인
 
-```text
 1. Chrome 주소창에 chrome://extensions 입력
 2. 개발자 모드 활성화
 3. 압축해제된 확장 프로그램 로드
 4. extension/public 선택
 5. Baseball Live Tracker Popup 열기
-```
 
 ### 4. 종료
 
@@ -441,16 +429,13 @@ KBO_TEAM_RANK_URL=https://www.koreabaseball.com/Record/TeamRank/TeamRankDaily.as
 KBO_COLLECTOR_INTERVAL_MS=30000
 ```
 
-기준:
-
-```text
+### 기준
 - KBO URL은 TypeScript 코드에 기본값으로 두지 않는다.
 - KBO 스코어보드 URL은 KBO_SCOREBOARD_URL로 관리한다.
 - KBO 팀 순위 URL은 KBO_TEAM_RANK_URL로 관리한다.
 - KBO Collector polling 간격은 KBO_COLLECTOR_INTERVAL_MS로 관리한다.
 - KBO_COLLECTOR_INTERVAL_MS는 30000ms 이상으로 설정한다.
 - .env 파일은 Git에 포함하지 않는다.
-```
 
 ---
 
@@ -474,7 +459,6 @@ KBO_COLLECTOR_INTERVAL_MS=30000
 
 초기 MVP에서는 아래 항목을 구현하지 않는다.
 
-```text
 - 외부 사이트 무단 크롤링
 - 네이버 스포츠 수집
 - KBO 게임센터 수집
@@ -494,4 +478,4 @@ KBO_COLLECTOR_INTERVAL_MS=30000
 - Kubernetes 구성
 - Prometheus / Grafana 모니터링
 - 머신러닝 기반 경기 예측
-```
+
