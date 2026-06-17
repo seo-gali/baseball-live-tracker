@@ -1,13 +1,14 @@
 {
   "type": "module",
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "dev": "node --env-file=.env --import tsx src/index.ts",
+    "dev:kafka": "node --env-file=.env --import tsx src/kafkaDemo.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit",
-    "dev:kafka": "tsx src/kafkaDemo.ts"
+    "start": "node --env-file=.env dist/index.js",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "cheerio": "^1.2.0",
     "kafkajs": "^2.2.4",
     "ws": "^8.21.0"
   },

@@ -3,7 +3,7 @@ import type { GameEvent, GameEventType, InningHalf } from "./gameEvent.js";
 // Consumer에서 최소 구조 검증을 하기 위해 허용 가능한 inningHalf 값을 배열로 관리
 const INNING_HALVES: readonly InningHalf[] = ["TOP", "BOTTOM"];
 
-// backend/src/events/gameEvent.ts에 정의된 GameEventType과 동일한 값 목록.
+// backend/src/events/gameEvent.ts에 정의된 GameEventType과 동일한 값 목록
 const GAME_EVENT_TYPES: readonly GameEventType[] = [
   "GAME_START",
   "GAME_END",
@@ -27,6 +27,18 @@ const isInningHalf = (value: unknown): value is InningHalf => {
   return typeof value === "string" && INNING_HALVES.includes(value as InningHalf);
 };
 
+// inningHalf가 "TOP", "BOTTOM", null 중 하나인지 확인
+// KBO 스코어보드에서는 초/말을 항상 확정할 수 없으므로 null을 허용한다.
+const isNullableInningHalf = (value: unknown): value is InningHalf | null => {
+  return value === null || isInningHalf(value);
+};
+
+// 정수 또는 null인지 확인
+// KBO 스코어보드에서는 inning, outCount를 항상 확정할 수 없으므로 null을 허용한다.
+const isNullableInteger = (value: unknown): value is number | null => {
+  return value === null || Number.isInteger(value);
+};
+
 // eventType이 GameEventType 목록에 포함되는지 확인
 const isGameEventType = (value: unknown): value is GameEventType => {
   return (
@@ -43,13 +55,13 @@ export const isGameEvent = (value: unknown): value is GameEvent => {
 
   return (
     typeof value.gameId === "string" &&
-    Number.isInteger(value.inning) &&
-    isInningHalf(value.inningHalf) &&
+    isNullableInteger(value.inning) &&
+    isNullableInningHalf(value.inningHalf) &&
     typeof value.homeTeam === "string" &&
     typeof value.awayTeam === "string" &&
     Number.isInteger(value.homeScore) &&
     Number.isInteger(value.awayScore) &&
-    Number.isInteger(value.outCount) &&
+    isNullableInteger(value.outCount) &&
     isGameEventType(value.eventType) &&
     typeof value.message === "string" &&
     typeof value.timestamp === "string"

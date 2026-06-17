@@ -1,14 +1,16 @@
 # Baseball Live Tracker
 
-> KBO 경기 데이터를 기반으로 Kafka와 WebSocket을 통해 실시간 경기 이벤트를 Chrome Extension에 전달하는 학습용 프로젝트
+> KBO 공식 스코어보드와 팀 순위 데이터를 기반으로 Kafka와 WebSocket을 통해 경기 상태를 Chrome Extension Popup에 전달하는 학습용 프로젝트
 
 ## 개요
 
-Baseball Live Tracker는 KBO 경기 데이터를 수집하고, Kafka 기반 이벤트 파이프라인을 통해 처리한 뒤 WebSocket으로 Chrome Extension에 실시간 전달하는 학습용 프로젝트다.
+Baseball Live Tracker는 KBO 공식 사이트의 스코어보드와 팀 순위 데이터를 수집하고, Kafka 기반 이벤트 파이프라인을 통해 처리한 뒤 WebSocket으로 Chrome Extension Popup에 전달하는 학습용 프로젝트다.
 
-이 프로젝트는 단순한 경기 정보 조회 앱이 아니라, 경기 데이터 수집, 메시지 큐 기반 비동기 처리, WebSocket 브로드캐스트, Chrome Extension 표시, 브라우저 알림 흐름을 단계적으로 구현하는 것을 목표로 한다.
+이 프로젝트는 전체 야구 기록 서비스나 문자중계 서비스가 아니다.
 
-초기 단계에서는 Mock Game Event를 사용해 Kafka, WebSocket, Chrome Extension 흐름을 먼저 검증한다. 이후 KBO 공식 경기 데이터 연동을 통해 실제 경기 일정, 경기 상태, 스코어, 주요 이벤트를 처리하는 구조로 확장한다.
+목표는 KBO 공식 사이트의 공개 HTML에서 확인 가능한 경기 상태와 팀 순위 데이터를 수집하고, 이를 이벤트 기반 백엔드 파이프라인으로 전달하는 흐름을 구현하는 것이다.
+
+초기 단계에서는 Mock Game Event를 사용해 Kafka, WebSocket, Chrome Extension 흐름을 먼저 검증한다. 이후 KBO 공식 스코어보드와 팀 순위 데이터를 수집하는 Collector로 교체한다.
 
 ---
 
@@ -18,18 +20,23 @@ Baseball Live Tracker는 KBO 경기 데이터를 수집하고, Kafka 기반 이�
 
 * Mock 야구 경기 이벤트 생성
 * Kafka Producer를 통한 경기 이벤트 발행
-* Kafka Consumer를 통한 이벤트 처리
+* Kafka Consumer를 통한 경기 이벤트 처리
 * WebSocket 기반 실시간 이벤트 전송
 * Chrome Extension Popup UI
 * 응원 팀 선택
-* 실시간 스코어 표시
+* KBO 공식 스코어보드 데이터 수집
+* KBO 공식 팀 순위 데이터 수집
+* 스코어보드 점수 / 경기 상태 변경 감지
+* 스코어보드 기반 `GameEvent` 변환
+* `KBO_SNAPSHOT` 기반 현재 경기 상태 전달
+* 선택 팀 기준 경기 정보 표시
+* 선택 팀 기준 순위 / 시즌 성적 / 승률 / 게임차 표시
 
 ### 구현 예정
 
-* KBO 공식 경기 데이터 연동
-* 경기 일정 및 경기 상태 수집
-* 득점, 홈런, 선수 교체 등 주요 이벤트 알림
-* 최근 경기 이벤트 로그 저장
+* Popup UX / 팀 선택 유지 개선
+* Docker Compose 실행 정리
+* README / 시연 문서화
 
 ---
 
@@ -42,30 +49,38 @@ Baseball Live Tracker는 KBO 경기 데이터를 수집하고, Kafka 기반 이�
 * WebSocket
 * Chrome Extension Manifest V3
 * Docker Compose
+* cheerio
 
 ---
 
 ## 전체 구조
 
 ```text
-KBO Game Data
-    ↓
+KBO 공식 사이트
+  ├─ 스코어보드
+  └─ 팀 순위
+        ↓
 Backend Collector
-    ↓
-Backend Producer
-    ↓
-Kafka
-    ↓
-Backend Consumer
-    ↓
-WebSocket Server
-    ↓
-Chrome Extension
-    ↓
-Popup / Notification
+        ├─ KBO_SNAPSHOT
+        │     ↓
+        │   WebSocket Server
+        │     ↓
+        │   Chrome Extension Popup
+        │
+        └─ GameEvent
+              ↓
+            Kafka Producer
+              ↓
+            Kafka
+              ↓
+            Kafka Consumer
+              ↓
+            WebSocket Server
+              ↓
+            Chrome Extension Popup
 ```
 
-### 현재 Mock 기반 검증 흐름
+### 초기 Mock 기반 검증 흐름
 
 ```text
 Mock Game Event Generator
@@ -89,31 +104,22 @@ Chrome Extension Popup
 baseball-live-tracker
 ├─ backend
 │  ├─ src
-│  │  ├─ api
-│  │  ├─ websocket
 │  │  ├─ collector
+│  │  ├─ websocket
 │  │  ├─ producer
 │  │  ├─ consumer
 │  │  ├─ events
 │  │  ├─ kafka
 │  │  └─ config
-│  ├─ test
 │  ├─ package.json
 │  └─ tsconfig.json
 │
 ├─ extension
-│  ├─ src
-│  │  ├─ popup
-│  │  ├─ background
-│  │  ├─ storage
-│  │  └─ notifications
-│  ├─ public
-│  │  ├─ manifest.json
-│  │  ├─ popup.html
-│  │  ├─ popup.css
-│  │  └─ popup.js
-│  ├─ package.json
-│  └─ tsconfig.json
+│  └─ public
+│     ├─ manifest.json
+│     ├─ popup.html
+│     ├─ popup.css
+│     └─ popup.js
 │
 ├─ infra
 │  └─ docker-compose.yml
@@ -128,50 +134,36 @@ baseball-live-tracker
 
 ```text
 backend
-- KBO 경기 데이터 수집
+- KBO 스코어보드 / 팀 순위 데이터 수집
+- 경기 이벤트 모델 관리
 - Kafka Producer / Consumer
 - WebSocket Server
-- API Server
-- 경기 이벤트 모델 관리
 
 extension
-- Chrome Extension
-- Popup UI
-- Background Service Worker
-- 알림 처리
-- 로컬 상태 저장
+- Chrome Extension Popup UI
+- WebSocket 메시지 수신
+- 선택 팀 경기 정보 표시
+- 선택 팀 순위 / 시즌 성적 / 승률 / 게임차 표시
+- WebSocket 연결 상태 표시
 
 infra
 - Kafka 로컬 실행 환경
 - Docker Compose 구성
-
-README.md
-- 프로젝트 소개
-- 실행 방법
-- 구조 설명
 ```
 
 ---
 
 ## 이벤트 데이터 모델
 
-Backend에서 생성한 경기 이벤트는 WebSocket을 통해 Chrome Extension으로 전달된다.
+Backend에서 생성한 경기 이벤트는 Kafka를 거쳐 WebSocket으로 Chrome Extension Popup에 전달된다.
 
-Mock 경기 이벤트는 Kafka Producer를 통해 `baseball.game.events` Topic에 발행된다.    
-Kafka Consumer는 해당 이벤트를 소비한 뒤 WebSocket Server로 전달하고,    
-WebSocket Server는 동일한 `GameEvent` 구조를 Chrome Extension Popup에 broadcast한다.
+Mock 단계에서는 전체 이벤트 타입을 사용할 수 있다.
 
-### 이닝 구분
-
-```ts
-// TOP: 초, BOTTOM: 말
-export type InningHalf = "TOP" | "BOTTOM";
-```
+KBO 스코어보드 Collector 연동 이후에는 스코어보드에서 안정적으로 확인 가능한 이벤트만 생성한다.
 
 ### 이벤트 타입
 
 ```ts
-// 백엔드 내부에서 사용할 경기 이벤트 타입 목록
 export type GameEventType =
   | "GAME_START"
   | "GAME_END"
@@ -184,75 +176,49 @@ export type GameEventType =
   | "ERROR";
 ```
 
-| 이벤트 타입             | 설명        |
-| ------------------ | --------- |
-| `GAME_START`       | 경기 시작     |
-| `GAME_END`         | 경기 종료     |
-| `SCORE`            | 득점        |
-| `HOME_RUN`         | 홈런        |
-| `OUT_COUNT_CHANGE` | 아웃카운트 변경  |
-| `PITCHER_CHANGE`   | 투수 교체     |
-| `BATTER_CHANGE`    | 타자 교체     |
-| `INNING_CHANGE`    | 이닝 변경     |
-| `ERROR`            | 이벤트 처리 오류 |
+### 실제 Collector 생성 이벤트
+
+| 이벤트 타입             | 생성 여부 | 기준                          |
+| ------------------ | ----- | --------------------------- |
+| `SCORE`            | 생성    | 이전 점수보다 현재 점수가 증가           |
+| `GAME_END`         | 생성    | 이전 상태가 종료 전이고 현재 상태가 종료     |
+| `ERROR`            | 생성    | 수집 또는 파싱 실패                 |
+| `GAME_START`       | 보류    | 스코어보드 상태 표현이 안정적으로 확인된 뒤 검토 |
+| `HOME_RUN`         | 제외    | 스코어보드만으로 판정 불가              |
+| `OUT_COUNT_CHANGE` | 제외    | 스코어보드에서 제공하지 않음             |
+| `PITCHER_CHANGE`   | 제외    | 문자중계 없이 안정 판정 불가            |
+| `BATTER_CHANGE`    | 제외    | 문자중계 없이 안정 판정 불가            |
+| `INNING_CHANGE`    | 제외    | 현재 이닝 전환을 안정적으로 판정하기 어려움    |
 
 ### 경기 이벤트 구조
 
+KBO 스코어보드만으로는 현재 이닝, 초/말, 아웃카운트를 항상 확인할 수 없다.
+
+따라서 실제 Collector 연동 이후에는 해당 필드를 nullable로 둔다.
+
 ```ts
-// WebSocket으로 Extension에 전달할 경기 이벤트 표준 구조
+export type InningHalf = "TOP" | "BOTTOM";
+
 export type GameEvent = {
   gameId: string;
-  inning: number;
-  inningHalf: InningHalf;
+  inning: number | null;
+  inningHalf: InningHalf | null;
   homeTeam: string;
   awayTeam: string;
   homeScore: number;
   awayScore: number;
-  outCount: number;
+  outCount: number | null;
   eventType: GameEventType;
   message: string;
   timestamp: string;
 };
 ```
 
-| 필드           | 설명                            |
-| ------------ | ----------------------------- |
-| `gameId`     | 경기 식별자                        |
-| `inning`     | 현재 이닝                         |
-| `inningHalf` | 초/말 구분                        |
-| `homeTeam`   | 홈 팀                           |
-| `awayTeam`   | 원정 팀                          |
-| `homeScore`  | 홈 팀 점수                        |
-| `awayScore`  | 원정 팀 점수                       |
-| `outCount`   | 현재 아웃카운트                      |
-| `eventType`  | 경기 이벤트 타입                     |
-| `message`    | Chrome Extension에 표시할 사용자 메시지 |
-| `timestamp`  | 이벤트 생성 시각                     |
-
-
-#### 이벤트 예시
-
-```json
-{
-  "gameId": "2026-06-12-LG-DOO",
-  "inning": 7,
-  "inningHalf": "TOP",
-  "homeTeam": "DOO",
-  "awayTeam": "LG",
-  "homeScore": 3,
-  "awayScore": 5,
-  "outCount": 1,
-  "eventType": "SCORE",
-  "message": "LG 7회초 1득점",
-  "timestamp": "2026-06-12T10:21:00Z"
-}
-```
-
 ---
 
 ## Kafka Producer / Consumer
 
-Mock 경기 이벤트를 Kafka Topic에 발행하고, Consumer가 해당 Topic에서 이벤트를 소비하는 흐름 구현
+Mock 경기 이벤트를 Kafka Topic에 발행하고, Consumer가 해당 Topic에서 이벤트를 소비한다.
 
 ```text
 Mock Game Event Generator
@@ -270,237 +236,67 @@ Kafka Consumer
 baseball.game.events
 ```
 
-### Kafka 메시지 구조
+### Kafka 메시지 기준
 
-Kafka message value는 기존 `GameEvent` 모델을 JSON 문자열로 직렬화한 값이다.
-
-```json
-{
-  "gameId": "2026-06-15-LG-DOO",
-  "inning": 1,
-  "inningHalf": "TOP",
-  "homeTeam": "DOO",
-  "awayTeam": "LG",
-  "homeScore": 0,
-  "awayScore": 0,
-  "outCount": 0,
-  "eventType": "GAME_START",
-  "message": "경기 시작: LG vs DOO",
-  "timestamp": "2026-06-15T13:58:28.866Z"
-}
-```
-
-Kafka message key는 `gameId`를 사용한다.
-
-### 로컬 Kafka 실행
-
-```powershell
-cd ./baseball-live-tracker
-
-docker compose -f infra/docker-compose.yml up -d
-```
-
-Kafka 컨테이너 상태 확인:
-
-```powershell
-docker ps
-```
-
-Topic 목록 확인:
-
-```powershell
-docker exec -it baseball-live-tracker-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
-```
-
-### Kafka Producer / Consumer 실행
-
-```powershell
-cd ./baseball-live-tracker/backend
-
-pnpm dev:kafka
-```
-
-정상 동작 시 Producer가 Mock 경기 이벤트를 발행하고, Consumer가 같은 이벤트를 소비한다.
-
-```text
-[kafka-admin] topic created: baseball.game.events
-[kafka-consumer] connected. groupId=baseball-live-tracker-game-event-consumer
-[kafka-consumer] subscribed. topic=baseball.game.events
-[kafka-producer] connected
-[kafka-producer] GAME_START: 경기 시작: LG vs DOO
-[kafka-consumer] baseball.game.events[0|0] GAME_START: 경기 시작: LG vs DOO
-```
-
-### Kafka Topic 상세 확인
-
-```powershell
-docker exec -it baseball-live-tracker-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic baseball.game.events
-```
-
-#### 정상 기준
-
-```text
-Topic: baseball.game.events
-PartitionCount: 1
-ReplicationFactor: 1
-```
-
-### Kafka CLI Consumer 확인
-
-```powershell
-docker exec -it baseball-live-tracker-kafka /opt/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic baseball.game.events --from-beginning
-```
-
-#### 정상 기준
-
-Kafka CLI Consumer는 Kafka message value를 그대로 출력하므로 `GameEvent` JSON 문자열이 표시된다.
-
-```json
-{"gameId":"2026-06-15-LG-DOO","inning":1,"inningHalf":"TOP","homeTeam":"DOO","awayTeam":"LG","homeScore":0,"awayScore":0,"outCount":0,"eventType":"GAME_START","message":"경기 시작: LG vs DOO","timestamp":"..."}
-```
-
-### Kafka 종료
-
-```powershell
-cd ./baseball-live-tracker
-
-docker compose -f infra/docker-compose.yml down
-```
+* Kafka message key는 `gameId`를 사용한다.
+* Kafka message value는 `GameEvent` JSON 문자열을 사용한다.
+* Consumer는 Kafka message value를 `GameEvent`로 파싱한 뒤 WebSocket Server로 전달한다.
 
 ---
 
 ## WebSocket 실시간 이벤트 반영
 
-Kafka Consumer가 소비한 경기 이벤트를 WebSocket Server로 전달하고, WebSocket Server가 Chrome Extension Popup으로 이벤트를 실시간 broadcast한다.
+Kafka Consumer가 소비한 `GameEvent`는 WebSocket Server를 통해 Chrome Extension Popup으로 broadcast된다.
+
+KBO Collector가 수집한 현재 경기 상태와 팀 순위 데이터는 `KBO_SNAPSHOT`으로 WebSocket Server에 전달된다.
 
 ```text
-Mock Game Event Generator
-    ↓
-Kafka Producer
-    ↓
-baseball.game.events Topic
-    ↓
-Kafka Consumer
-    ↓
-WebSocket Server
-    ↓
-Chrome Extension Popup
+GameEvent
+→ Kafka Consumer
+→ WebSocket Server
+→ Chrome Extension Popup
 ```
 
-## 실시간 파이프라인 실행
-
-### 1. 터미널 1에서 Kafka 실행
-
-```powershell
-cd ./baseball-live-tracker
-
-docker compose -f infra/docker-compose.yml up -d
+```text
+KBO_SNAPSHOT
+→ WebSocket Server
+→ Chrome Extension Popup
 ```
 
-### 2. 터미널 2에서 backend 실행
+Popup에서는 아래 항목을 표시한다.
 
-```powershell
-cd ./baseball-live-tracker/backend
-
-pnpm dev
+```text
+- WebSocket 연결 상태
+- 응원 팀 선택
+- 경기 상태
+- 경기 날짜
+- 원정 팀 / 원정 점수
+- 홈 팀 / 홈 점수
+- 구장
+- 경기 시간
+- 선택 팀 순위
+- 시즌 성적
+- 승률 / 게임차
 ```
 
-#### 정상 로그 예시
+`GAME_EVENT`는 선택 팀 경기의 실시간 점수 갱신에 사용하고, `KBO_SNAPSHOT`은 Popup이 열렸을 때 현재 경기 정보와 순위 정보를 채우는 데 사용한다.
 
-```
-[websocket] server listening on ws://localhost:4000
-[kafka-admin] topic created: baseball.game.events
-[kafka-consumer] connected. groupId=baseball-live-tracker-game-event-consumer
-[kafka-consumer] subscribed. topic=baseball.game.events
-[kafka-producer] connected
-[kafka-producer] GAME_START: 경기 시작: LG vs DOO
-[mock-kafka-producer] started. interval=3000ms
-[backend] realtime pipeline started
-[backend] flow: Mock Producer → Kafka → Consumer → WebSocket → Popup
-```
-
-### 3. Chrome Extension Popup을 열면 WebSocket client가 연결
-
-```
-[websocket] client connected: ...
-[websocket] client message from ...: { type: 'SUBSCRIBE_TEAM', payload: { team: 'LG' } }
-```
-
-### 4. Kafka 이벤트가 Consumer를 거쳐 WebSocket으로 전달되면 로그 출력
-
-```
-[kafka-consumer] baseball.game.events[0|2] SCORE: LG 1회초 선취 득점
-[realtime] consumed SCORE: LG 1회초 선취 득점. websocketClients=1
-[websocket] broadcast SCORE: LG 1회초 선취 득점. clients=1
-```
-
-### 5. Chrome Extension 확인
-
-1. Chrome 주소창에 chrome://extensions 입력
-2. Baseball Live Tracker 확장 프로그램 새로고침
-3. Chrome Toolbar에서 확장 프로그램 아이콘 클릭
-4. Popup에서 WebSocket 연결 완료 확인
-5. 점수, 이닝, 아웃카운트, 최근 이벤트 로그가 실시간 갱신되는지 확인
-
-#### 정상 기준
-- WebSocket 연결 상태가 표시된다.
-- Kafka를 거친 이벤트가 Popup 최근 이벤트 로그에 표시된다.
-- 경기 점수, 현재 이닝, 아웃카운트가 이벤트 payload 기준으로 갱신된다.
-- Popup을 닫았다가 다시 열면 WebSocket client가 새로 연결된다.
-
-### 6. 실시간 파이프라인 종료
-
-backend 터미널에서 `Ctrl + C`를 누른다.
-
-#### 정상 로그
-
-```
-[backend] shutting down. signal=SIGINT
-[kafka-producer] disconnected
-[mock-kafka-producer] stopped
-[kafka-consumer] disconnected
-[websocket] server closed
-```
-
-### 7. Kafka 컨테이너를 종료
-
-```powershell
-cd ./baseball-live-tracker
-
-docker compose -f infra/docker-compose.yml down
-```
 
 ---
 
 ## KBO 데이터 출처 및 수집 범위
 
-### 최종 수집 출처
+### 수집 출처
 
 ```text
-https://www.koreabaseball.com/Schedule/ScoreBoard.aspx
+KBO 스코어보드:
+https://www.koreabaseball.com/Schedule/Scoreboard.aspx
+
+KBO 팀 순위:
+https://www.koreabaseball.com/Record/TeamRank/TeamRankDaily.aspx
 ```
 
-### 수집 방식
-- KBO 공식 스코어보드 HTML을 주기적으로 조회
-- 이전 경기 상태 snapshot과 현재 snapshot을 비교해 이벤트 생성
-
-```text
-KBO 공식 스코어보드
-    ↓
-KboScoreboardCollector
-    ↓
-KboScoreboardParser
-    ↓
-KboGameSnapshot
-    ↓
-KboGameEventFactory
-    ↓
-Kafka Producer
-```
-
-### 수집 대상
-
-스코어보드 HTML에서 확인 가능한 항목만 수집
+### 스코어보드 수집 대상
 
 ```text
 - 경기 날짜
@@ -518,33 +314,143 @@ Kafka Producer
 - 세이브 투수 텍스트
 ```
 
-### 이벤트 변환 범위
+### 팀 순위 수집 대상
 
 ```text
-- GAME_START
-- GAME_END
-- SCORE
-- ERROR
+- 기준일
+- 순위
+- 팀명
+- 경기 수
+- 승
+- 패
+- 무
+- 승률
+- 게임차
+- 최근 10경기
+- 연속
+- 홈 성적
+- 방문 성적
 ```
 
-### 수집 제외 기준
+### 수집 기준
 
 ```text
-- 네이버 스포츠 수집 제외
-- KBO 모바일 사이트 수집 제외
-- KBO 영문 사이트 수집 제외
-- KBO 게임센터 수집 제외
-- KBO 문자중계 수집 제외
-- /ws/ 내부 경로 직접 호출 제외
-- 로그인 기반 데이터 수집 제외
-- 영상, 이미지, 로고, 선수 사진 수집 제외
-- 전체 시즌 데이터 대량 저장 제외
+- 로그인 없이 접근 가능한 공개 HTML만 사용한다.
+- 내부 API나 /ws/ 경로를 직접 호출하지 않는다.
+- 네이버 스포츠, KBO 모바일, KBO 영문 사이트는 수집하지 않는다.
+- 게임센터와 문자중계는 수집하지 않는다.
+- 영상, 이미지, 로고, 선수 사진은 수집하지 않는다.
+- 전체 시즌 데이터를 대량 저장하지 않는다.
+- 학습용 로컬 프로젝트 범위에서만 사용한다.
 ```
 
-### 구현 기준
+---
 
-- 스코어보드에서 확인되지 않는 값은 임의로 만들지 않는다. 
-- 현재 이닝, 초/말, 아웃카운트처럼 스코어보드에서 안정적으로 확인할 수 없는 필드는 `null`로 처리하거나 Popup에서 `-`로 표시한다.
+## KBO 데이터 수집 흐름
+
+KBO 공식 스코어보드와 팀 순위 HTML을 수집해 Chrome Extension Popup에 현재 선택 팀의 경기 정보와 순위 정보를 표시한다.
+
+```text
+KBO 스코어보드 / 팀 순위
+→ KboCollector
+→ KBO_SNAPSHOT
+→ WebSocket Server
+→ Chrome Extension Popup
+```
+
+```text
+KBO 스코어보드 변경 감지
+→ GameEvent 생성
+→ Kafka Producer
+→ Kafka
+→ Kafka Consumer
+→ WebSocket Server
+→ Chrome Extension Popup
+```
+
+### 수집 및 표시 기준
+- 스코어보드는 .smsScore 기준으로 경기 블록을 파싱한다.
+- 경기전 상태의 빈 점수는 0으로 처리한다.
+- 빈 H / E / B 값은 null로 처리한다.
+- 팀 순위는 table.tData 중 순위 / 팀명 / 승률 summary가 있는 테이블만 사용한다.
+- 팀 순위 데이터는 Kafka 이벤트로 발행하지 않는다.
+- 팀 순위 데이터는 KBO_SNAPSHOT payload에 포함한다.
+- WebSocket Server는 최신 KBO_SNAPSHOT을 저장하고 새 Popup 연결 시 replay한다.
+- Popup은 선택 팀의 경기 정보와 순위 정보를 표시한다.
+
+---
+
+## 실행 방법
+
+### 1. Kafka 실행
+
+```powershell
+cd ./baseball-live-tracker
+
+docker compose -f infra/docker-compose.yml up -d
+```
+
+### 2. Backend 실행
+
+```powershell
+cd ./baseball-live-tracker/backend
+
+pnpm dev
+```
+
+### 3. Chrome Extension 확인
+
+```text
+1. Chrome 주소창에 chrome://extensions 입력
+2. 개발자 모드 활성화
+3. 압축해제된 확장 프로그램 로드
+4. extension/public 선택
+5. Baseball Live Tracker Popup 열기
+```
+
+### 4. 종료
+
+Backend 터미널에서 `Ctrl + C`를 누른다.
+
+Kafka 컨테이너를 종료한다.
+
+```powershell
+cd ./baseball-live-tracker
+
+docker compose -f infra/docker-compose.yml down
+```
+
+---
+
+## 환경 변수
+
+Backend는 `.env` 파일을 `node --env-file=.env` 옵션으로 로드한다.
+
+`backend/.env` 예시:
+
+```env
+KAFKA_CLIENT_ID=baseball-game-kadka
+KAFKA_BROKERS=localhost:9092
+KAFKA_GAME_EVENTS_TOPIC=baseball.game.events
+KAFKA_CONSUMER_GROUP_ID=baseball-game-event-consumer
+
+WEBSOCKET_PORT=4000
+
+KBO_SCOREBOARD_URL=https://www.koreabaseball.com/Schedule/Scoreboard.aspx
+KBO_TEAM_RANK_URL=https://www.koreabaseball.com/Record/TeamRank/TeamRankDaily.aspx
+KBO_COLLECTOR_INTERVAL_MS=30000
+```
+
+기준:
+
+```text
+- KBO URL은 TypeScript 코드에 기본값으로 두지 않는다.
+- KBO 스코어보드 URL은 KBO_SCOREBOARD_URL로 관리한다.
+- KBO 팀 순위 URL은 KBO_TEAM_RANK_URL로 관리한다.
+- KBO Collector polling 간격은 KBO_COLLECTOR_INTERVAL_MS로 관리한다.
+- KBO_COLLECTOR_INTERVAL_MS는 30000ms 이상으로 설정한다.
+- .env 파일은 Git에 포함하지 않는다.
+```
 
 ---
 
@@ -557,9 +463,9 @@ Kafka Producer
 * [x] Phase 5. Kafka Producer / Consumer
 * [x] Phase 6. WebSocket 실시간 이벤트 반영
 * [x] Phase 7. KBO 데이터 출처 조사 및 수집 범위 확정
-* [ ] Phase 8. KBO 경기 데이터 Collector 구현
-* [ ] Phase 9. 알림 / 팀 즐겨찾기
-* [ ] Phase 10. Docker Compose 구성
+* [x] Phase 8. KBO 스코어보드 / 팀 순위 Collector 구현
+* [ ] Phase 9. Popup UX / 팀 선택 유지 개선
+* [ ] Phase 10. Docker Compose 실행 정리
 * [ ] Phase 11. README / 시연 문서화
 
 ---
@@ -570,13 +476,22 @@ Kafka Producer
 
 ```text
 - 외부 사이트 무단 크롤링
+- 네이버 스포츠 수집
+- KBO 게임센터 수집
+- KBO 문자중계 수집
+- 비공식 API 호출
+- /ws/ 하위 경로 직접 호출
 - 로그인 기능
 - 사용자 계정 관리
-- Chrome Web Store 배포
+- Chrome Notification
+- Background Service Worker
+- chrome.storage 영구 저장
+- 선수별 상세 기록 수집
+- 홈런 / 투수 교체 / 타자 교체 판정
+- 볼카운트 / 아웃카운트 / 주자 상황 수집
+- 배포용 Chrome Web Store 등록
 - 대규모 트래픽 처리
 - Kubernetes 구성
 - Prometheus / Grafana 모니터링
 - 머신러닝 기반 경기 예측
 ```
-
-KBO 공식 데이터 연동은 제외 범위가 아니다. 다만 실제 연동 전에는 데이터 출처, 요청 방식, 호출 주기, 저장 범위, 이용 조건을 먼저 확인한다.

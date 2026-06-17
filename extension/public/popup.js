@@ -1,214 +1,331 @@
 const WS_URL = "ws://localhost:4000";
-const MAX_EVENT_LOGS = 8;
+const FAVORITE_TEAM_STORAGE_KEY = "baseball-live-tracker.favorite-team";
 
-// 서버에서 받은 eventType을 Popup 화면에 표시할 한글 라벨로 변환하기 위한 매핑
-const EVENT_TYPE_LABELS = {
-  GAME_START: "경기 시작",
-  GAME_END: "경기 종료",
-  SCORE: "득점",
-  HOME_RUN: "홈런",
-  OUT_COUNT_CHANGE: "아웃카운트",
-  PITCHER_CHANGE: "투수 교체",
-  BATTER_CHANGE: "타자 교체",
-  INNING_CHANGE: "이닝 변경",
-  ERROR: "오류",
+// Backend에서 내려주는 KBO 경기 상태 값을 Popup 표시용 한글 문구로 변환
+const GAME_STATUS_LABELS = {
+  SCHEDULED: "경기전",
+  LIVE: "진행중",
+  FINAL: "경기종료",
+  CANCELED: "취소",
+  UNKNOWN: "상태 확인중",
 };
 
-// 정의되지 않은 eventType이 들어오면 원본 값을 그대로 표시
-const formatEventTypeLabel = (eventType) => {
-  return EVENT_TYPE_LABELS[eventType] ?? eventType;
+// 현재 KBO Collector는 KBO HTML의 팀명 값을 그대로 사용하므로 한글 팀명으로 보정
+const TEAM_VALUE_ALIASES = {
+  DOO: "두산",
+  SAM: "삼성",
+  LOT: "롯데",
+  HAN: "한화",
+  KIW: "키움",
 };
 
-// Popup에서 사용자가 선택한 응원 팀 select box
-const favoriteTeamSelect = document.querySelector("#favorite-team");
+// Popup에서 사용하는 DOM 요소를 한 곳에서 관리
+const dom = {
+  favoriteTeam: document.querySelector("#favorite-team"),
 
-// 현재 선택된 팀을 화면에 표시하는 영역
-const selectedTeamText = document.querySelector("#selected-team");
+  gameStatus: document.querySelector("#game-status"),
+  gameDate: document.querySelector("#game-date"),
 
-// 점수판 영역
-const awayTeamText = document.querySelector("#away-team");
-const awayScoreText = document.querySelector("#away-score");
-const homeTeamText = document.querySelector("#home-team");
-const homeScoreText = document.querySelector("#home-score");
+  awayTeam: document.querySelector("#away-team"),
+  awayScore: document.querySelector("#away-score"),
+  homeTeam: document.querySelector("#home-team"),
+  homeScore: document.querySelector("#home-score"),
 
-// 경기 상태 영역
-const inningStatusText = document.querySelector("#inning-status");
-const outCountText = document.querySelector("#out-count");
+  stadium: document.querySelector("#stadium"),
+  gameTime: document.querySelector("#game-time"),
 
-// 최근 이벤트 로그 영역
-const eventList = document.querySelector("#event-list");
+  selectedRank: document.querySelector("#selected-rank"),
+  selectedRecord: document.querySelector("#selected-record"),
+  selectedRate: document.querySelector("#selected-rate"),
 
-// WebSocket 연결 상태 표시 영역
-const statusDot = document.querySelector("#status-dot");
-const connectionText = document.querySelector("#connection-text");
-
-// 현재 Popup에서 사용하는 WebSocket 연결 객체
-let socket = null;
-
-// 서버 연결이 끊겼을 때 재연결을 예약하는 timer id
-let reconnectTimerId = null;
-
-// Popup이 닫히면서 의도적으로 연결을 종료하는지 구분하기 위한 flag
-let isManualClose = false;
-
-// 연결 상태 텍스트와 상태 점 색상을 함께 갱신
-const setConnectionStatus = (status, message) => {
-  statusDot.className = `status-dot ${status}`;
-  connectionText.textContent = message;
+  statusDot: document.querySelector("#status-dot"),
+  connectionText: document.querySelector("#connection-text"),
 };
 
-// 서버 이벤트의 이닝 초/말 값을 화면 표시용 한글로 변환
-const formatInningHalf = (inningHalf) => {
-  if (inningHalf === "TOP") {
-    return "초";
+// 팀명 비교 전에 앞뒤 공백을 제거
+// KBO HTML에서 가져온 팀명과 select value를 같은 기준으로 비교하기 위한 함수
+const normalizeTeamName = (teamName) => {
+  return String(teamName ?? "").trim();
+};
+
+// localStorage에 저장된 이전 팀 value를 현재 KBO Collector 팀명 기준으로 변환
+const normalizeFavoriteTeamValue = (teamName) => {
+  const normalized = normalizeTeamName(teamName);
+
+  return TEAM_VALUE_ALIASES[normalized] || normalized || "KT";
+};
+
+// Popup 런타임 상태.
+// latestSnapshot은 Backend가 보내는 KBO_SNAPSHOT payload를 저장
+const state = {
+  socket: null,
+  favoriteTeam: normalizeFavoriteTeamValue(
+    localStorage.getItem(FAVORITE_TEAM_STORAGE_KEY),
+  ),
+  latestSnapshot: null,
+};
+
+// 점수 값 표시.
+// 경기전 상태에서는 Backend가 0으로 내려주고, 값이 없으면 "-"로 표시
+const formatScore = (score) => {
+  if (score === null || score === undefined) {
+    return "-";
   }
 
-  if (inningHalf === "BOTTOM") {
-    return "말";
-  }
-
-  return "";
+  return String(score);
 };
 
-// 초기 HTML에 들어 있는 기본 대기 문구를 제거
-const clearWaitingPlaceholder = () => {
-  const firstItem = eventList.querySelector("li");
-
-  if (
-    eventList.children.length === 1 &&
-    firstItem &&
-    firstItem.textContent === "WebSocket 연결 대기"
-  ) {
-    eventList.innerHTML = "";
-  }
+// Backend 경기 상태 값을 화면 표시용 문구로 변환
+const formatGameStatus = (gameStatus) => {
+  return GAME_STATUS_LABELS[gameStatus] || gameStatus || "-";
 };
 
-// 최근 이벤트 로그를 상단에 추가
-// 최대 MAX_EVENT_LOGS 개수만 유지
-const appendEventLog = (message) => {
-  clearWaitingPlaceholder();
+// WebSocket 연결 상태 UI를 갱신
+// CSS는 data-status 또는 class 둘 다 대응할 수 있게 둘 다 갱신
+const setConnectionState = (status, message) => {
+  dom.statusDot.dataset.status = status;
 
-  const item = document.createElement("li");
-  item.textContent = message;
+  dom.statusDot.classList.remove(
+    "connecting",
+    "connected",
+    "disconnected",
+    "error",
+  );
 
-  eventList.prepend(item);
-
-  while (eventList.children.length > MAX_EVENT_LOGS) {
-    eventList.removeChild(eventList.lastElementChild);
-  }
+  dom.statusDot.classList.add(status);
+  dom.connectionText.textContent = message;
 };
 
-// 서버에서 받은 GAME_EVENT payload를 Popup 화면에 반영
-const renderGameEvent = (event) => {
-  awayTeamText.textContent = event.awayTeam;
-  awayScoreText.textContent = String(event.awayScore);
+// 현재 선택한 응원 팀이 포함된 경기 찾기
+// scoreboardGames는 Backend KBO_SNAPSHOT의 scoreboardGames 배열
+const findFavoriteGame = (scoreboardGames) => {
+  const favoriteTeam = normalizeTeamName(state.favoriteTeam);
 
-  homeTeamText.textContent = event.homeTeam;
-  homeScoreText.textContent = String(event.homeScore);
-
-  inningStatusText.textContent = `${event.inning}회${formatInningHalf(event.inningHalf)}`;
-  outCountText.textContent = `${event.outCount} Out`;
-
-  // 최근 이벤트 로그에는 eventType 라벨과 서버 메시지를 함께 표시
-  appendEventLog(`[${formatEventTypeLabel(event.eventType)}] ${event.message}`);
+  return scoreboardGames.find((game) => {
+    return (
+      normalizeTeamName(game.awayTeam) === favoriteTeam ||
+      normalizeTeamName(game.homeTeam) === favoriteTeam
+    );
+  });
 };
 
-// 현재 선택된 응원 팀을 서버로 전송
-const sendSelectedTeam = () => {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
+// 현재 선택한 응원 팀의 순위 정보 찾기
+// teamRanks는 Backend KBO_SNAPSHOT의 teamRanks 배열
+const findFavoriteTeamRank = (teamRanks) => {
+  const favoriteTeam = normalizeTeamName(state.favoriteTeam);
+
+  return teamRanks.find((teamRank) => {
+    return normalizeTeamName(teamRank.teamName) === favoriteTeam;
+  });
+};
+
+// 경기 정보가 아직 없을 때 점수판 영역을 초기 상태로 생성
+const renderEmptyGame = () => {
+  dom.gameStatus.textContent = "수집 대기";
+  dom.gameDate.textContent = "-";
+
+  dom.awayTeam.textContent = "-";
+  dom.awayScore.textContent = "-";
+  dom.homeTeam.textContent = "-";
+  dom.homeScore.textContent = "-";
+
+  dom.stadium.textContent = "-";
+  dom.gameTime.textContent = "-";
+};
+
+// 순위 정보가 아직 없을 때 순위 영역을 초기 상태로 생성
+const renderEmptyRank = () => {
+  dom.selectedRank.textContent = "-";
+  dom.selectedRecord.textContent = "-";
+  dom.selectedRate.textContent = "-";
+};
+
+// 선택 팀이 포함된 경기 정보를 화면에 표시
+const renderGame = (game) => {
+  if (!game) {
+    renderEmptyGame();
+    dom.gameStatus.textContent = "경기 없음";
     return;
   }
 
-  socket.send(
+  dom.gameStatus.textContent = formatGameStatus(game.gameStatus);
+  dom.gameDate.textContent = game.gameDate || "-";
+
+  dom.awayTeam.textContent = game.awayTeam || "-";
+  dom.awayScore.textContent = formatScore(game.awayScore);
+
+  dom.homeTeam.textContent = game.homeTeam || "-";
+  dom.homeScore.textContent = formatScore(game.homeScore);
+
+  dom.stadium.textContent = game.stadium || "-";
+  dom.gameTime.textContent = game.gameTime || "-";
+};
+
+// 선택 팀의 시즌 순위 정보를 화면에 표시
+const renderRank = (teamRank) => {
+  if (!teamRank) {
+    renderEmptyRank();
+    return;
+  }
+
+  dom.selectedRank.textContent = `${teamRank.rank}위`;
+  dom.selectedRecord.textContent =
+    `${teamRank.wins}승 ${teamRank.losses}패 ${teamRank.draws}무`;
+  dom.selectedRate.textContent =
+    `${teamRank.winningRate} / ${teamRank.gamesBehind}`;
+};
+
+// Backend에서 받은 KBO_SNAPSHOT을 기준으로 화면 전체를 갱신
+const renderSnapshot = (snapshot) => {
+  if (!snapshot || typeof snapshot !== "object") {
+    renderEmptyGame();
+    renderEmptyRank();
+    return;
+  }
+
+  state.latestSnapshot = snapshot;
+
+  const scoreboardGames = Array.isArray(snapshot.scoreboardGames)
+    ? snapshot.scoreboardGames
+    : [];
+
+  const teamRanks = Array.isArray(snapshot.teamRanks) ? snapshot.teamRanks : [];
+
+  const favoriteGame = findFavoriteGame(scoreboardGames);
+  const favoriteTeamRank = findFavoriteTeamRank(teamRanks);
+
+  renderGame(favoriteGame);
+  renderRank(favoriteTeamRank);
+};
+
+// Kafka 기반 GAME_EVENT가 들어왔을 때 선택 팀 경기만 반영
+// 실시간 득점 이벤트가 오면 기존 snapshot의 경기 정보 위에 점수만 갱신
+const renderGameEvent = (event) => {
+  const favoriteTeam = normalizeTeamName(state.favoriteTeam);
+
+  const isFavoriteGame =
+    normalizeTeamName(event.awayTeam) === favoriteTeam ||
+    normalizeTeamName(event.homeTeam) === favoriteTeam;
+
+  if (!isFavoriteGame) {
+    return;
+  }
+
+  const latestGames = Array.isArray(state.latestSnapshot?.scoreboardGames)
+    ? state.latestSnapshot.scoreboardGames
+    : [];
+
+  const baseGame = findFavoriteGame(latestGames);
+
+  renderGame({
+    ...baseGame,
+    gameStatus: "LIVE",
+    awayTeam: event.awayTeam,
+    homeTeam: event.homeTeam,
+    awayScore: event.awayScore,
+    homeScore: event.homeScore,
+  });
+};
+
+// Popup에서 선택한 응원 팀을 WebSocket Server에 전달
+// 현재 Backend는 이 값을 로그와 snapshot replay 트리거로 사용
+const sendTeamSubscription = () => {
+  if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
+    return;
+  }
+
+  state.socket.send(
     JSON.stringify({
       type: "SUBSCRIBE_TEAM",
       payload: {
-        team: favoriteTeamSelect.value,
+        team: state.favoriteTeam,
       },
     }),
   );
 };
 
-// 예약된 재연결 timer가 있으면 제거
-const clearReconnectTimer = () => {
-  if (reconnectTimerId) {
-    clearTimeout(reconnectTimerId);
-    reconnectTimerId = null;
+// WebSocket Server에서 받은 메시지 타입에 따라 처리
+// KBO_SNAPSHOT은 화면 전체 갱신, GAME_EVENT는 실시간 점수 갱신에 사용
+const handleSocketMessage = (message) => {
+  if (
+    message.type === "KBO_SNAPSHOT" ||
+    message.type === "SCOREBOARD_SNAPSHOT" ||
+    message.type === "KBO_COLLECTED_DATA"
+  ) {
+    renderSnapshot(message.payload);
+    return;
   }
-};
 
-// WebSocket 연결이 끊겼을 때 2초 뒤 재연결 시도
-const scheduleReconnect = () => {
-  clearReconnectTimer();
-
-  reconnectTimerId = setTimeout(() => {
-    connectWebSocket();
-  }, 2000);
+  if (message.type === "GAME_EVENT") {
+    renderGameEvent(message.payload);
+  }
 };
 
 // WebSocket Server에 연결
+// 연결이 끊기면 3초 뒤 재연결
 const connectWebSocket = () => {
-  setConnectionStatus("connecting", "WebSocket 연결 중");
+  setConnectionState("connecting", "WebSocket 연결 중");
 
-  socket = new WebSocket(WS_URL);
+  const socket = new WebSocket(WS_URL);
+  state.socket = socket;
 
-  // 서버와 연결되면 연결 상태를 갱신하고 현재 선택 팀을 서버에 전송
   socket.addEventListener("open", () => {
-    setConnectionStatus("connected", "WebSocket 연결 완료");
-    sendSelectedTeam();
+    setConnectionState("connected", "WebSocket 연결 완료");
+    sendTeamSubscription();
   });
 
-  // 서버에서 보낸 메시지를 수신
   socket.addEventListener("message", (event) => {
     try {
       const message = JSON.parse(event.data);
-
-      if (message.type === "SERVER_STATUS") {
-        appendEventLog(message.payload.message);
-        return;
-      }
-
-      if (message.type === "GAME_EVENT") {
-        renderGameEvent(message.payload);
-        return;
-      }
-
-      appendEventLog("알 수 없는 서버 메시지 수신");
-    } catch {
-      appendEventLog("서버 메시지 파싱 실패");
+      handleSocketMessage(message);
+    } catch (error) {
+      console.error("[popup] failed to parse websocket message", error);
     }
   });
 
-  // 연결이 종료되면 상태를 갱신
   socket.addEventListener("close", () => {
-    setConnectionStatus("disconnected", "WebSocket 연결 종료");
+    setConnectionState("disconnected", "WebSocket 연결 종료");
 
-    if (!isManualClose) {
-      scheduleReconnect();
-    }
+    window.setTimeout(() => {
+      connectWebSocket();
+    }, 3000);
   });
 
-  // 연결 중 오류가 발생하면 화면에 오류 상태를 표시
   socket.addEventListener("error", () => {
-    setConnectionStatus("error", "WebSocket 연결 오류");
+    setConnectionState("error", "WebSocket 오류");
   });
 };
 
-// 응원 팀 select box가 변경되면 화면 표시를 바꾸고 서버에도 선택 팀을 전달
-favoriteTeamSelect.addEventListener("change", (event) => {
-  selectedTeamText.textContent = event.target.value;
-  sendSelectedTeam();
-});
+// 응원 팀 select 변경 시 저장값을 갱신하고,
+// 이미 받은 snapshot이 있으면 같은 데이터에서 선택 팀 기준으로 다시 렌더링
+const handleFavoriteTeamChange = () => {
+  state.favoriteTeam = normalizeFavoriteTeamValue(dom.favoriteTeam.value);
+  localStorage.setItem(FAVORITE_TEAM_STORAGE_KEY, state.favoriteTeam);
 
-// Popup이 닫힐 때 timer와 WebSocket 연결을 정리
-window.addEventListener("beforeunload", () => {
-  isManualClose = true;
-  clearReconnectTimer();
-
-  if (socket) {
-    socket.close(1000, "popup closed");
+  if (state.latestSnapshot) {
+    renderSnapshot(state.latestSnapshot);
+  } else {
+    renderEmptyGame();
+    renderEmptyRank();
   }
-});
 
-// Popup이 열리면 즉시 WebSocket 연결 시작
-connectWebSocket();
+  sendTeamSubscription();
+};
+
+// Popup 초기화.
+// 저장된 응원 팀을 select에 반영하고 WebSocket 연결을 시작
+const initializePopup = () => {
+  state.favoriteTeam = normalizeFavoriteTeamValue(state.favoriteTeam);
+  localStorage.setItem(FAVORITE_TEAM_STORAGE_KEY, state.favoriteTeam);
+
+  dom.favoriteTeam.value = state.favoriteTeam;
+
+  renderEmptyGame();
+  renderEmptyRank();
+
+  dom.favoriteTeam.addEventListener("change", handleFavoriteTeamChange);
+
+  connectWebSocket();
+};
+
+initializePopup();

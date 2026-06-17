@@ -1,232 +1,281 @@
-@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap");
 
 * {
   box-sizing: border-box;
+  }
+
+:root {
+--bg: #0a0e1a;
+--panel: #0d1a0d;
+--panel-dark: #071207;
+--green: #4dff4d;
+--green-mid: #2a6a2a;
+--green-dark: #1a3a1a;
+--text: #e8f4e8;
+--muted: #88bb88;
+--yellow: #ffff44;
+--red: #ff4444;
+--gray: #777;
 }
 
 body {
-  width: 320px;
-  margin: 0;
-  font-family: 'Press Start 2P', monospace;
-  background: #0a0e1a;
-  color: #e8f4e8;
-  image-rendering: pixelated;
+width: 320px;
+margin: 0;
+font-family: "Press Start 2P", monospace;
+background: var(--bg);
+color: var(--text);
+image-rendering: pixelated;
 }
 
 .popup {
-  min-height: 100vh;
-  padding: 12px;
-  border: 4px solid #2a4a2a;
-  box-shadow: 4px 4px 0 #1a2e1a, inset 0 0 0 2px #1a3a1a;
+min-height: 100vh;
+padding: 12px;
+border: 4px solid #2a4a2a;
+box-shadow:
+4px 4px 0 #1a2e1a,
+inset 0 0 0 2px #1a3a1a;
 }
 
+/* Header */
+
 .header {
-  margin-bottom: 14px;
-  padding-bottom: 10px;
-  border-bottom: 3px solid #2a6a2a;
+margin-bottom: 14px;
+padding-bottom: 10px;
+border-bottom: 3px solid var(--green-mid);
 }
 
 .header::after {
-  content: '';
-  display: block;
-  width: 100%;
-  height: 1px;
-  background: #1a4a1a;
-  margin-top: 2px;
+content: "";
+display: block;
+width: 100%;
+height: 1px;
+margin-top: 2px;
+background: #1a4a1a;
 }
 
 .header h1 {
-  margin: 0;
-  font-size: 9px;
-  color: #4dff4d;
-  text-shadow: 2px 2px 0 #003300, -1px -1px 0 #003300;
-  letter-spacing: 1px;
-  line-height: 1.6;
+margin: 0;
+color: var(--green);
+font-size: 9px;
+line-height: 1.6;
+letter-spacing: 1px;
+text-shadow:
+2px 2px 0 #003300,
+-1px -1px 0 #003300;
 }
 
 .header p {
-  margin: 6px 0 0;
-  font-size: 7px;
-  color: #aaccaa;
-  letter-spacing: 0.5px;
+margin: 6px 0 0;
+color: #aaccaa;
+font-size: 7px;
+line-height: 1.6;
+letter-spacing: 0.5px;
 }
 
+/* Favorite team */
+
 .section {
-  margin-bottom: 12px;
+margin-bottom: 12px;
 }
 
 .label {
-  display: block;
-  margin-bottom: 6px;
-  font-size: 7px;
-  color: #88bb88;
-  letter-spacing: 0.5px;
+display: block;
+margin-bottom: 6px;
+color: var(--muted);
+font-size: 7px;
+line-height: 1.6;
+letter-spacing: 0.5px;
 }
 
 .select {
-  width: 100%;
-  padding: 8px 28px 8px 10px;
-  border: 3px solid #2a6a2a;
-  border-right-color: #1a3a1a;
-  border-bottom-color: #1a3a1a;
-  background:
-    linear-gradient(45deg, transparent 50%, #4dff4d 50%) right 12px center / 6px 6px no-repeat,
-    #0d1a0d;
-  color: #4dff4d;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 7px;
-  appearance: none;
-  cursor: pointer;
-  outline: none;
+width: 100%;
+height: 38px;
+padding: 8px 28px 8px 10px;
+color: var(--green);
+background:
+linear-gradient(45deg, transparent 50%, var(--green) 50%) right 12px center /
+6px 6px no-repeat,
+var(--panel);
+border: 3px solid var(--green-mid);
+border-right-color: var(--green-dark);
+border-bottom-color: var(--green-dark);
+font-family: "Press Start 2P", monospace;
+font-size: 7px;
+line-height: 1.6;
+appearance: none;
+cursor: pointer;
+outline: none;
 }
+
 .select:focus {
-  border-color: #4dff4d;
-  box-shadow: 0 0 0 2px #003300;
+border-color: var(--green);
+box-shadow: 0 0 0 2px #003300;
 }
 
-.score-card {
-  padding: 10px;
-  margin-bottom: 12px;
-  background: #0d1a0d;
-  border: 3px solid #2a6a2a;
-  border-right-color: #1a3a1a;
-  border-bottom-color: #1a3a1a;
-  position: relative;
+/* Main game card */
+
+.game-summary {
+position: relative;
+margin-bottom: 12px;
+padding: 10px;
+background: var(--panel);
+border: 3px solid var(--green-mid);
+border-right-color: var(--green-dark);
+border-bottom-color: var(--green-dark);
 }
 
-.score-card::before {
-  content: '▶ LIVE ◀';
-  position: absolute;
-  top: -9px;
-  right: 8px;
-  font-size: 6px;
-  color: #ff4444;
-  background: #0a0e1a;
-  padding: 0 4px;
-  animation: blink 1s step-end infinite;
+.game-summary::before {
+content: "KBO";
+position: absolute;
+top: -9px;
+right: 8px;
+padding: 0 4px;
+color: var(--green);
+background: var(--bg);
+font-size: 6px;
+line-height: 1;
 }
 
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
+.summary-top,
+.summary-bottom {
+display: flex;
+justify-content: space-between;
+gap: 8px;
+color: var(--muted);
+font-size: 7px;
+line-height: 1.8;
+}
+
+.summary-top {
+margin-bottom: 10px;
+padding-bottom: 8px;
+border-bottom: 1px dashed var(--green-dark);
+}
+
+.summary-bottom {
+margin-top: 10px;
+padding-top: 8px;
+border-top: 1px dashed var(--green-dark);
+}
+
+#game-status {
+color: var(--yellow);
+}
+
+.score-board {
+display: grid;
+gap: 4px;
 }
 
 .score-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 5px 2px;
-  border-bottom: 1px dashed #1a3a1a;
+display: grid;
+grid-template-columns: 1fr 42px;
+align-items: center;
+min-height: 28px;
+padding: 4px 2px;
+border-bottom: 1px dashed var(--green-dark);
 }
 
 .score-row:last-child {
-  border-bottom: none;
+border-bottom: none;
 }
 
-.team {
-  font-size: 8px;
-  color: #ccffcc;
+.team-name {
+color: #ccffcc;
+font-size: 8px;
+line-height: 1.6;
 }
 
 .score {
-  font-size: 16px;
-  color: #ffff44;
-  text-shadow: 2px 2px 0 #555500;
+color: var(--yellow);
+font-size: 15px;
+line-height: 1;
+text-align: right;
+text-shadow: 2px 2px 0 #555500;
 }
 
-.game-status {
+.versus {
+color: var(--green);
+font-size: 7px;
+line-height: 1.6;
+text-align: center;
+}
+
+/* Selected rank info */
+
+.rank-info {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 6px;
+  gap: 0;
   padding: 10px;
   margin-bottom: 12px;
-  background: #0d1a0d;
-  border: 3px solid #2a6a2a;
-  border-right-color: #1a3a1a;
-  border-bottom-color: #1a3a1a;
+  background: var(--panel);
+  border: 3px solid var(--green-mid);
+  border-right-color: var(--green-dark);
+  border-bottom-color: var(--green-dark);
 }
 
-.game-status > div {
-  display: flex;
-  justify-content: space-between;
+.rank-info > div {
+  display: grid;
+  grid-template-columns: 92px 1fr;
   align-items: center;
+  min-height: 28px;
   padding: 3px 0;
-  border-bottom: 1px dashed #1a3a1a;
+  border-bottom: 1px dashed var(--green-dark);
 }
 
-.game-status > div:last-child {
+.rank-info > div:last-child {
   border-bottom: none;
 }
 
-.game-status strong {
+.rank-info .label {
+  margin-bottom: 0;
+}
+
+.rank-info strong {
+  color: var(--green);
   font-size: 8px;
-  color: #4dff4d;
-}
-
-.section h2 {
-  margin: 0 0 8px;
-  font-size: 8px;
-  color: #4dff4d;
-  border-left: 4px solid #4dff4d;
-  padding-left: 6px;
-}
-
-.event-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 7px;
-  color: #aaccaa;
-}
-
-.event-list li {
-  padding: 5px 6px;
-  border-bottom: 1px dashed #1a3a1a;
-  display: flex;
-  gap: 6px;
-  align-items: center;
   line-height: 1.6;
+  text-align: right;
 }
 
-.event-list li::before {
-  content: '▷';
-  color: #4dff4d;
-  flex-shrink: 0;
-}
-
-.event-list li:last-child {
-  border-bottom: none;
-}
+/* Connection */
 
 .connection {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 7px;
-  color: #88bb88;
-  padding-top: 10px;
-  border-top: 2px solid #1a3a1a;
+display: flex;
+align-items: center;
+gap: 8px;
+min-height: 30px;
+padding-top: 10px;
+color: var(--muted);
+border-top: 2px solid var(--green-dark);
+font-size: 7px;
+line-height: 1.6;
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
-  background: #888;
-  flex-shrink: 0;
+width: 8px;
+height: 8px;
+flex-shrink: 0;
+background: var(--gray);
 }
 
-.status-dot.connecting {
-  background: #ffff44;
+.status-dot.connecting,
+.status-dot[data-status="connecting"] {
+background: var(--yellow);
 }
 
-.status-dot.connected {
-  background: #4dff4d;
+.status-dot.connected,
+.status-dot[data-status="connected"] {
+background: var(--green);
 }
 
-.status-dot.disconnected {
-  background: #888;
+.status-dot.disconnected,
+.status-dot[data-status="disconnected"] {
+background: var(--gray);
 }
 
-.status-dot.error {
-  background: #ff4444;
+.status-dot.error,
+.status-dot[data-status="error"] {
+background: var(--red);
 }

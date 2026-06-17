@@ -1,22 +1,55 @@
 import type { WebSocketServer } from "ws";
+
+import { collectAndPublishKboEvents } from "./collector/kboCollector.js";
+import { getKboCollectorConfig } from "./config/kboConfig.js";
 import {
   disconnectGameEventConsumer,
   startGameEventConsumer,
 } from "./consumer/gameEventConsumer.js";
 import { ensureGameEventTopic } from "./kafka/ensureGameEventTopic.js";
-import { createMockGameEventKafkaProducer } from "./producer/mockGameEventKafkaProducer.js";
 import {
   broadcastGameEvent,
+  broadcastWebSocketMessage,
   getConnectedClientCount,
   startWebSocketServer,
 } from "./websocket/webSocketServer.js";
 
-const mockProducer = createMockGameEventKafkaProducer();
-
 let webSocketServer: WebSocketServer | null = null;
+let collectorIntervalId: NodeJS.Timeout | null = null;
+let isCollecting = false;
 let isShuttingDown = false;
 
-// 프로세스 종료 시 Kafka Producer, Consumer, WebSocket Server를 정리
+// KBO Collector가 이전 수집을 끝내기 전에 다음 polling이 겹치지 않도록 막는다.
+// 수집 성공 시 현재 스코어보드 snapshot을 WebSocket으로 바로 전달한다.
+const runKboCollectorOnce = async (): Promise<void> => {
+  if (isCollecting) {
+    console.warn(
+      "[kbo-collector] skipped because previous collection is still running",
+    );
+    return;
+  }
+
+  isCollecting = true;
+
+  try {
+    const collectedData = await collectAndPublishKboEvents();
+
+    if (!collectedData) {
+      return;
+    }
+
+    broadcastWebSocketMessage({
+      type: "KBO_SNAPSHOT",
+      payload: collectedData,
+    });
+  } catch (error) {
+    console.error("[kbo-collector] collection failed", error);
+  } finally {
+    isCollecting = false;
+  }
+};
+
+// 프로세스 종료 시 Collector interval, Kafka Consumer, WebSocket Server를 정리
 const shutdown = async (signal: string): Promise<void> => {
   if (isShuttingDown) {
     return;
@@ -27,7 +60,13 @@ const shutdown = async (signal: string): Promise<void> => {
   console.log(`[backend] shutting down. signal=${signal}`);
 
   try {
-    await mockProducer.stop();
+    if (collectorIntervalId) {
+      clearInterval(collectorIntervalId);
+      collectorIntervalId = null;
+
+      console.log("[kbo-collector] polling stopped");
+    }
+
     await disconnectGameEventConsumer();
 
     if (webSocketServer) {
@@ -41,6 +80,8 @@ const shutdown = async (signal: string): Promise<void> => {
           resolve();
         });
       });
+
+      webSocketServer = null;
 
       console.log("[websocket] server closed");
     }
@@ -59,6 +100,8 @@ process.on("SIGTERM", () => {
 
 // 실시간 이벤트 파이프라인 시작
 const main = async (): Promise<void> => {
+  const { collectorIntervalMs } = getKboCollectorConfig();
+
   // 1. Chrome Extension Popup 연결을 받을 WebSocket Server 시작
   webSocketServer = startWebSocketServer();
 
@@ -77,17 +120,30 @@ const main = async (): Promise<void> => {
     },
   });
 
-  // 4. 실제 Collector 구현 전까지는 Mock Producer를 이벤트 소스로 사용
-  await mockProducer.start();
+  // 4. KBO Collector를 이벤트 소스로 사용
+  // 첫 수집 결과도 KBO_SNAPSHOT으로 WebSocket에 전달한다.
+  await runKboCollectorOnce();
+
+  collectorIntervalId = setInterval(() => {
+    void runKboCollectorOnce();
+  }, collectorIntervalMs);
+
+  console.log(
+    `[kbo-collector] polling started. interval=${collectorIntervalMs}ms`,
+  );
 
   console.log("[backend] realtime pipeline started");
-  console.log("[backend] flow: Mock Producer → Kafka → Consumer → WebSocket → Popup");
+  console.log("[backend] flow: KBO Collector → Kafka → Consumer → WebSocket → Popup");
 };
 
 main().catch(async (error) => {
   console.error("[backend] failed to start realtime pipeline", error);
 
-  await mockProducer.stop();
+  if (collectorIntervalId) {
+    clearInterval(collectorIntervalId);
+    collectorIntervalId = null;
+  }
+
   await disconnectGameEventConsumer();
 
   if (webSocketServer) {

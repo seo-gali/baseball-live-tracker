@@ -1,10 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { WebSocket, WebSocketServer } from "ws";
+
 import { getServerConfig } from "../config/serverConfig.js";
 import type { GameEvent } from "../events/gameEvent.js";
 
-// 서버 연결 상태를 클라이언트에 알려주기 위한 메시지 구조.
-// Popup에서는 이 메시지를 받아 연결 완료 로그와 상태 UI를 갱신
+// WebSocket Server가 클라이언트로 보낼 수 있는 공통 메시지 구조
+export type WebSocketServerMessage = {
+  type: string;
+  payload?: unknown;
+};
+
+// 서버 연결 상태를 클라이언트에 알려주기 위한 메시지 구조
 type ServerStatusMessage = {
   type: "SERVER_STATUS";
   payload: {
@@ -14,18 +20,13 @@ type ServerStatusMessage = {
   };
 };
 
-// 실제 경기 이벤트를 클라이언트에 전달하기 위한 메시지 구조.
-// payload는 backend/src/events/gameEvent.ts에 정의된 표준 GameEvent 모델을 사용
+// Kafka Consumer가 전달한 실제 경기 이벤트 메시지 구조
 type GameEventMessage = {
   type: "GAME_EVENT";
   payload: GameEvent;
 };
 
-// WebSocket Server가 클라이언트로 보낼 수 있는 메시지 타입.
-type ServerMessage = ServerStatusMessage | GameEventMessage;
-
-// 클라이언트가 서버로 보낼 수 있는 메시지의 최소 구조.
-// Phase 6에서는 SUBSCRIBE_TEAM 메시지를 로그 확인용으로만 받는다.
+// 클라이언트가 서버로 보낼 수 있는 메시지의 최소 구조
 type ClientMessage = {
   type: string;
   payload?: unknown;
@@ -35,19 +36,57 @@ type ClientMessage = {
 // key는 서버에서 발급한 clientId, value는 실제 WebSocket 연결 객체
 const clients = new Map<string, WebSocket>();
 
+// 가장 최근 KBO 수집 snapshot을 보관한다.
+// Popup이 수집 이후에 접속해도 즉시 현재 경기 정보를 받을 수 있게 하기 위함
+let latestSnapshotMessage: WebSocketServerMessage | null = null;
+
+// snapshot으로 취급할 메시지 타입 목록
+const SNAPSHOT_MESSAGE_TYPES = new Set([
+  "KBO_SNAPSHOT",
+  "SCOREBOARD_SNAPSHOT",
+  "KBO_COLLECTED_DATA",
+]);
+
 // WebSocket 연결이 아직 열려 있는지 확인
-// 닫힌 연결에 send를 호출하면 오류가 날 수 있으므로 전송 전 체크
 const isOpen = (client: WebSocket): boolean => {
   return client.readyState === WebSocket.OPEN;
 };
 
 // 서버 메시지를 JSON 문자열로 변환해서 클라이언트에 전송
-const sendJson = (client: WebSocket, message: ServerMessage): void => {
+const sendJson = (
+  client: WebSocket,
+  message: WebSocketServerMessage,
+): boolean => {
   if (!isOpen(client)) {
-    return;
+    return false;
   }
 
   client.send(JSON.stringify(message));
+  return true;
+};
+
+// 최신 snapshot 메시지를 메모리에 저장
+const cacheLatestSnapshotMessage = (message: WebSocketServerMessage): void => {
+  if (!SNAPSHOT_MESSAGE_TYPES.has(message.type)) {
+    return;
+  }
+
+  latestSnapshotMessage = message;
+};
+
+// 새로 연결된 클라이언트 또는 팀 구독을 다시 보낸 클라이언트에 최신 snapshot 재전송
+const replayLatestSnapshot = (clientId: string, client: WebSocket): void => {
+  if (!latestSnapshotMessage) {
+    return;
+  }
+
+  const sent = sendJson(client, latestSnapshotMessage);
+
+  if (sent) {
+    console.log(
+      `[websocket] replay ${latestSnapshotMessage.type}. clientId=${clientId}`,
+    );
+  }
 };
 
 // Kafka Consumer가 전달한 GameEvent를 현재 연결된 모든 클라이언트에 broadcast
@@ -61,12 +100,9 @@ const broadcastGameEvent = (event: GameEvent): void => {
   let sentCount = 0;
 
   for (const client of clients.values()) {
-    if (!isOpen(client)) {
-      continue;
+    if (sendJson(client, message)) {
+      sentCount += 1;
     }
-
-    sendJson(client, message);
-    sentCount += 1;
   }
 
   console.log(
@@ -74,9 +110,27 @@ const broadcastGameEvent = (event: GameEvent): void => {
   );
 };
 
+// KBO snapshot 등 일반 WebSocket 메시지를 모든 클라이언트에 broadcast
+// KBO_SNAPSHOT은 최신 상태로 저장해두었다가 나중에 연결된 Popup에도 재전송한다.
+const broadcastWebSocketMessage = (message: WebSocketServerMessage): void => {
+  cacheLatestSnapshotMessage(message);
+
+  let sentCount = 0;
+
+  for (const client of clients.values()) {
+    if (sendJson(client, message)) {
+      sentCount += 1;
+    }
+  }
+
+  console.log(`[websocket] broadcast ${message.type}. clients=${sentCount}`);
+};
+
 // 클라이언트에서 받은 raw message를 JSON 객체로 파싱
 // 잘못된 JSON이거나 type 필드가 없으면 null을 반환
-const parseClientMessage = (rawMessage: WebSocket.RawData): ClientMessage | null => {
+const parseClientMessage = (
+  rawMessage: WebSocket.RawData,
+): ClientMessage | null => {
   try {
     const parsed = JSON.parse(rawMessage.toString());
 
@@ -110,15 +164,14 @@ export const startWebSocketServer = (): WebSocketServer => {
   const server = new WebSocketServer({
     port: websocketPort,
   });
-  
-	// 서버가 정상적으로 listen 상태에 들어가면 실행 로그를 출력
+
+  // 서버가 정상적으로 listen 상태에 들어가면 실행 로그를 출력
   server.on("listening", () => {
     console.log(`[websocket] server listening on ws://localhost:${websocketPort}`);
   });
 
   // Chrome Extension Popup이 WebSocket Server에 연결되면 실행
   server.on("connection", (client) => {
-    // 각 WebSocket 연결을 식별하기 위해 서버에서 UUID를 발급
     const clientId = randomUUID();
 
     clients.set(clientId, client);
@@ -133,7 +186,10 @@ export const startWebSocketServer = (): WebSocketServer => {
         message: "WebSocket 연결 완료",
         timestamp: new Date().toISOString(),
       },
-    });
+    } satisfies ServerStatusMessage);
+
+    // 이미 수집된 KBO snapshot이 있으면 새로 연결된 Popup에 즉시 전달
+    replayLatestSnapshot(clientId, client);
 
     // 클라이언트에서 보낸 메시지 수신
     client.on("message", (rawMessage) => {
@@ -145,17 +201,21 @@ export const startWebSocketServer = (): WebSocketServer => {
       }
 
       console.log(`[websocket] client message from ${clientId}:`, message);
+
+      // Popup에서 팀 변경 후 SUBSCRIBE_TEAM을 다시 보내면
+      // 최신 snapshot을 즉시 재전송해서 화면을 바로 갱신한다.
+      if (message.type === "SUBSCRIBE_TEAM") {
+        replayLatestSnapshot(clientId, client);
+      }
     });
 
     // 클라이언트 연결이 정상 종료되면 clients 목록에서 제거
-    // 모든 클라이언트가 종료된 경우 Mock 이벤트 loop도 정리
     client.on("close", () => {
       clients.delete(clientId);
       console.log(`[websocket] client disconnected: ${clientId}`);
     });
 
-    // 클라이언트 연결 중 오류가 발생해도 clients 목록에서 제거
-    // 오류로 인해 모든 연결이 사라진 경우 Mock 이벤트 loop 정리
+    // 클라이언트 연결 중 오류가 발생하면 clients 목록에서 제거
     client.on("error", (error) => {
       clients.delete(clientId);
       console.error(`[websocket] client error: ${clientId}`, error);
@@ -170,4 +230,8 @@ export const startWebSocketServer = (): WebSocketServer => {
   return server;
 };
 
-export { broadcastGameEvent, getConnectedClientCount };
+export {
+  broadcastGameEvent,
+  broadcastWebSocketMessage,
+  getConnectedClientCount,
+};
