@@ -31,10 +31,13 @@ Baseball Live Tracker는 KBO 공식 사이트의 스코어보드와 팀 순위 �
 * `KBO_SNAPSHOT` 기반 현재 경기 상태 전달
 * 선택 팀 기준 경기 정보 표시
 * 선택 팀 기준 순위 / 시즌 성적 / 승률 / 게임차 표시
+* Popup 선택 팀 localStorage 저장 / 복원
+* 선택 팀이 없는 경우 전체 경기 목록 표시
+* 진행 중 경기의 공격 팀 / 아웃카운트 / 주자 상황 표시
+* KBO 다이아고딕 기반 Popup UI 스타일 적용
 
 ### 구현 예정
 
-* Popup UX / 팀 선택 유지 개선
 * Docker Compose 실행 정리
 * README / 시연 문서화
 
@@ -141,8 +144,11 @@ baseball-live-tracker
 ### extension
 - Chrome Extension Popup UI
 - WebSocket 메시지 수신
+- 선택 팀 localStorage 저장 / 복원
 - 선택 팀 경기 정보 표시
 - 선택 팀 순위 / 시즌 성적 / 승률 / 게임차 표시
+- 선택 팀이 없는 경우 전체 경기 목록 표시
+- 진행 중 경기의 공격 팀 / 아웃카운트 / 주자 상황 표시
 - WebSocket 연결 상태 표시
 
 ### infra
@@ -183,10 +189,10 @@ export type GameEventType =
 | `ERROR`            | 생성    | 수집 또는 파싱 실패                 |
 | `GAME_START`       | 보류    | 스코어보드 상태 표현이 안정적으로 확인된 뒤 검토 |
 | `HOME_RUN`         | 제외    | 스코어보드만으로 판정 불가              |
-| `OUT_COUNT_CHANGE` | 제외    | 스코어보드에서 제공하지 않음             |
+| `OUT_COUNT_CHANGE` | 제외    | 문자중계 없이 독립 이벤트로 안정 판정하지 않음 |
+| `INNING_CHANGE`    | 제외    | 현재 이닝은 표시할 수 있으나 독립 이벤트 생성은 제외 |
 | `PITCHER_CHANGE`   | 제외    | 문자중계 없이 안정 판정 불가            |
 | `BATTER_CHANGE`    | 제외    | 문자중계 없이 안정 판정 불가            |
-| `INNING_CHANGE`    | 제외    | 현재 이닝 전환을 안정적으로 판정하기 어려움    |
 
 ### 경기 이벤트 구조
 
@@ -265,17 +271,22 @@ Popup에서는 아래 항목을 표시한다.
 
 - WebSocket 연결 상태
 - 응원 팀 선택
+- 마지막 선택 팀 자동 복원
+- 전체 경기 목록
 - 경기 상태
 - 경기 날짜
 - 원정 팀 / 원정 점수
 - 홈 팀 / 홈 점수
 - 구장
 - 경기 시간
+- 진행 중 경기의 공격 팀
+- 진행 중 경기의 아웃카운트
+- 진행 중 경기의 주자 상황
 - 선택 팀 순위
 - 시즌 성적
 - 승률 / 게임차
 
-`GAME_EVENT`는 선택 팀 경기의 실시간 점수 갱신에 사용하고, `KBO_SNAPSHOT`은 Popup이 열렸을 때 현재 경기 정보와 순위 정보를 채우는 데 사용한다.
+`GAME_EVENT`는 선택 팀 경기의 실시간 점수와 경기중 상태 보정에 사용하고, `KBO_SNAPSHOT`은 Popup이 열렸을 때 현재 경기 정보와 순위 정보를 채우는 데 사용한다.
 
 
 ---
@@ -367,6 +378,9 @@ KBO 스코어보드 변경 감지
 - 팀 순위 데이터는 KBO_SNAPSHOT payload에 포함한다.
 - WebSocket Server는 최신 KBO_SNAPSHOT을 저장하고 새 Popup 연결 시 replay한다.
 - Popup은 선택 팀의 경기 정보와 순위 정보를 표시한다.
+- Popup은 사용자가 마지막으로 선택한 팀을 `localStorage`에 저장하고 다음 실행 시 복원한다.
+- 선택 팀이 없는 경우 Popup은 전체 경기 목록을 표시한다.
+- `KBO_SNAPSHOT` 또는 `GAME_EVENT`에 경기중 상태 값이 포함되어 있으면 Popup은 공격 팀 / 아웃카운트 / 주자 상황을 표시한다.
 
 ---
 
@@ -449,7 +463,7 @@ KBO_COLLECTOR_INTERVAL_MS=30000
 * [x] Phase 6. WebSocket 실시간 이벤트 반영
 * [x] Phase 7. KBO 데이터 출처 조사 및 수집 범위 확정
 * [x] Phase 8. KBO 스코어보드 / 팀 순위 Collector 구현
-* [ ] Phase 9. Popup UX / 팀 선택 유지 개선
+* [x] Phase 9. Popup UX / 팀 선택 유지 개선
 * [ ] Phase 10. Docker Compose 실행 정리
 * [ ] Phase 11. README / 시연 문서화
 
@@ -472,7 +486,7 @@ KBO_COLLECTOR_INTERVAL_MS=30000
 - chrome.storage 영구 저장
 - 선수별 상세 기록 수집
 - 홈런 / 투수 교체 / 타자 교체 판정
-- 볼카운트 / 아웃카운트 / 주자 상황 수집
+- 문자중계 기반 볼카운트 / 아웃카운트 / 주자 상황 수집
 - 배포용 Chrome Web Store 등록
 - 대규모 트래픽 처리
 - Kubernetes 구성

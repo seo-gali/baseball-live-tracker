@@ -18,21 +18,19 @@
         <p>KBO 실시간 경기 알림</p>
       </section>
 
-      <section class="section">
-        <label for="favorite-team" class="label">응원 팀</label>
-        <select id="favorite-team" class="select">
-          <option value="KT">KT 위즈</option>
-          <option value="LG">LG 트윈스</option>
-          <option value="두산">두산 베어스</option>
-          <option value="KIA">KIA 타이거즈</option>
-          <option value="삼성">삼성 라이온즈</option>
-          <option value="롯데">롯데 자이언츠</option>
-          <option value="한화">한화 이글스</option>
-          <option value="SSG">SSG 랜더스</option>
-          <option value="NC">NC 다이노스</option>
-          <option value="키움">키움 히어로즈</option>
-        </select>
-      </section>
+      <select id="favorite-team" class="select">
+        <option value="">전체 경기</option>
+        <option value="LG">LG 트윈스</option>
+        <option value="DOOSAN">두산 베어스</option>
+        <option value="KIA">KIA 타이거즈</option>
+        <option value="SAMSUNG">삼성 라이온즈</option>
+        <option value="LOTTE">롯데 자이언츠</option>
+        <option value="HANWHA">한화 이글스</option>
+        <option value="SSG">SSG 랜더스</option>
+        <option value="KT">KT 위즈</option>
+        <option value="NC">NC 다이노스</option>
+        <option value="KIWOOM">키움 히어로즈</option>
+      </select>
 
       <section class="game-summary">
         <div class="summary-top">
@@ -58,6 +56,21 @@
           <span id="stadium">-</span>
           <span id="game-time">-</span>
         </div>
+
+        <div class="game-detail">
+          <div>
+            <span class="label">공격 팀</span>
+            <strong id="batting-team">-</strong>
+          </div>
+          <div>
+            <span class="label">아웃카운트</span>
+            <strong id="out-count">-</strong>
+          </div>
+          <div>
+            <span class="label">주자</span>
+            <strong id="base-state">-</strong>
+          </div>
+        </div>
       </section>
 
       <section class="rank-info">
@@ -73,6 +86,13 @@
           <span class="label">승률 / 게임차</span>
           <strong id="selected-rate">-</strong>
         </div>
+      </section>
+
+      <section id="game-list-section" class="game-list-section hidden">
+        <h2>전체 경기</h2>
+        <ul id="game-list" class="game-list">
+          <li class="empty-text">수집 대기</li>
+        </ul>
       </section>
 
       <section class="connection">
