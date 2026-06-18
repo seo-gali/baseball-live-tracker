@@ -3,19 +3,22 @@ services:
     image: apache/kafka:4.1.2
     container_name: baseball-live-tracker-kafka
     ports:
-      - "9092:9092"
+      # Host PC에서는 localhost:9092로 Kafka 확인 가능
+      # Kafka 컨테이너 내부 EXTERNAL listener는 19092를 사용
+      - "9092:19092"
     environment:
       # Single-node KRaft Kafka
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
 
-      # Host PC에서 backend가 localhost:9092로 Kafka에 접속하도록 설정
-      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # Docker 내부 backend는 kafka:9092로 접속
+      # Host PC Kafka CLI 또는 외부 클라이언트는 localhost:9092로 접속
+      KAFKA_LISTENERS: INTERNAL://:9092,EXTERNAL://:19092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
 
       # 단일 브로커 개발 환경용 설정
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
@@ -23,5 +26,30 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
 
-      # Topic은 애플리케이션 Admin Client에서 명시적으로 생성한다.
+      # Topic은 애플리케이션 Admin Client에서 명시적으로 생성
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list > /dev/null 2>&1"
+        ]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: baseball-live-tracker-backend
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    env_file:
+      - ../backend/.env
+    restart: unless-stopped

@@ -5,6 +5,7 @@
     "dev:kafka": "node --env-file=.env --import tsx src/kafkaDemo.ts",
     "build": "tsc",
     "start": "node --env-file=.env dist/index.js",
+    "start:docker": "node dist/index.js",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
