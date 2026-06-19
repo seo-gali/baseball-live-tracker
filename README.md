@@ -33,9 +33,25 @@ Baseball Live Tracker는 KBO 공식 사이트의 스코어보드와 팀 순위 �
 * 선택 팀 기준 순위 / 시즌 성적 / 승률 / 게임차 표시
 * Popup 선택 팀 localStorage 저장 / 복원
 * 선택 팀이 없는 경우 전체 경기 목록 표시
-* 진행 중 경기의 공격 팀 / 아웃카운트 / 주자 상황 표시
+* 진행 중 경기의 현재 이닝 / 공격 팀 표시
+* 볼 / 스트라이크 / 아웃카운트 표시
+* 주자 점유 상태 표시
 * KBO 다이아고딕 기반 Popup UI 스타일 적용
 * Docker Compose 기반 Kafka / Backend 통합 실행
+
+---
+
+## 실행 화면
+
+| 전체 경기 목록 | 선택 팀 경기 상세 |
+| --- | --- |
+| <img src="./docs/images/popup-all-games.png" width="320" alt="전체 경기 목록 화면" /> | <img src="./docs/images/popup-selected-team.png" width="320" alt="선택 팀 경기 상세 화면" /> |
+
+- 전체 경기 선택 시 당일 경기 목록과 현재 경기 상태를 표시한다.
+- 팀 선택 시 현재 이닝, 점수, 공격 팀, 볼·스트라이크·아웃카운트, 주자 점유 상태를 표시한다.
+- 선택 팀의 순위, 시즌 성적, 승률, 게임차를 함께 표시한다.
+
+---
 
 ---
 
@@ -134,6 +150,10 @@ baseball-live-tracker
 │
 ├─ extension
 │  └─ public
+│     ├─ fonts
+│     │  ├─ KBO-Dia-Gothic_light.woff
+│     │  ├─ KBO-Dia-Gothic_medium.woff
+│     │  └─ KBO-Dia-Gothic_bold.woff
 │     ├─ manifest.json
 │     ├─ popup.html
 │     ├─ popup.css
@@ -291,20 +311,19 @@ KBO_SNAPSHOT
 * 응원 팀 선택
 * 마지막 선택 팀 자동 복원
 * 전체 경기 목록
-* 경기 상태
+* 경기 상태와 현재 이닝
 * 경기 날짜
 * 원정 팀 / 원정 점수
 * 홈 팀 / 홈 점수
-* 구장
-* 경기 시간
+* 구장 / 경기 시간
 * 진행 중 경기의 공격 팀
-* 진행 중 경기의 아웃카운트
-* 진행 중 경기의 주자 상황
+* 볼 / 스트라이크 / 아웃카운트
+* 주자 점유 상태
 * 선택 팀 순위
 * 시즌 성적
 * 승률 / 게임차
 
-> `GAME_EVENT`는 선택 팀 경기의 실시간 점수와 경기중 상태 보정에 사용하고, `KBO_SNAPSHOT`은 Popup이 열렸을 때 현재 경기 정보와 순위 정보를 채우는 데 사용한다.
+> `GAME_EVENT`는 실시간 점수와 경기 종료 상태 보정에 사용한다. 현재 이닝, 공격 팀, 볼 / 스트라이크 / 아웃카운트, 주자 점유 상태와 팀 순위는 `KBO_SNAPSHOT`을 기준으로 표시한다.
 
 ---
 
@@ -332,11 +351,14 @@ https://www.koreabaseball.com/Record/TeamRank/TeamRankDaily.aspx
 * 원정 팀 점수
 * 홈 팀 점수
 * 경기 상태
+* 현재 이닝
+* 초 / 말
+* 볼카운트
+* 스트라이크카운트
+* 아웃카운트
+* 1루 / 2루 / 3루 주자 점유 상태
 * 이닝별 점수
 * R / H / E / B
-* 승리 투수 텍스트
-* 패전 투수 텍스트
-* 세이브 투수 텍스트
 
 ### 팀 순위 수집 대상
 
@@ -400,7 +422,10 @@ KBO 스코어보드 변경 감지
 * Popup은 선택 팀의 경기 정보와 순위 정보를 표시한다.
 * Popup은 사용자가 마지막으로 선택한 팀을 `localStorage`에 저장하고 다음 실행 시 복원한다.
 * 선택 팀이 없는 경우 Popup은 전체 경기 목록을 표시한다.
-* `KBO_SNAPSHOT` 또는 `GAME_EVENT`에 경기중 상태 값이 포함되어 있으면 Popup은 공격 팀 / 아웃카운트 / 주자 상황을 표시한다.
+* `.flag`의 `N회초` / `N회말` 값을 기준으로 현재 이닝과 공격 팀을 결정한다.
+* `.base p`의 `B-S Nout` 값을 기준으로 볼 / 스트라이크 / 아웃카운트를 파싱한다.
+* `.base1`, `.base2`, `.base3` 이미지 경로의 `base_on` 여부로 주자 점유 상태를 판단한다.
+* 현재 이닝, 공격 팀, 카운트, 주자 상태는 `KBO_SNAPSHOT`에 포함해 Popup에 전달한다.
 
 ---
 
@@ -540,3 +565,5 @@ docker compose -f infra/docker-compose.yml down
 * Kubernetes 구성
 * Prometheus / Grafana 모니터링
 * 머신러닝 기반 경기 예측
+
+> 문자중계 페이지는 수집하지 않는다. 다만 KBO 공식 스코어보드의 공개 경기 블록에 직접 노출되는 현재 이닝, 볼 / 스트라이크 / 아웃카운트, 주자 점유 상태는 수집 범위에 포함한다.

@@ -5,6 +5,7 @@ import type { GameEvent, InningHalf } from "../events/gameEvent.js";
 import { publishGameEvent } from "../producer/gameEventProducer.js";
 
 import type {
+  BaseState,
   KboCollectedData,
   KboGameStatus,
   KboScoreboardGame,
@@ -13,7 +14,7 @@ import type {
 } from "./kboTypes.js";
 
 // 스코어보드 변경 감지를 위해 이전 수집 결과를 메모리에 보관
-// 서버 재시작 시 초기화되어도 되는 Phase 8용 단순 상태 저장 방식
+// 서버 재시작 시 초기화되어도 되는 단순 상태 저장 방식
 const previousScoreboardGames = new Map<string, KboScoreboardGame>();
 
 // HTML 텍스트에서 불필요한 공백과 줄바꿈을 제거
@@ -54,6 +55,7 @@ const parseKboDate = (value: string): string | null => {
 
   if (dottedDate) {
     const [, year, month, day] = dottedDate;
+
     return `${year}-${month}-${day}`;
   }
 
@@ -61,6 +63,7 @@ const parseKboDate = (value: string): string | null => {
 
   if (dashedDate) {
     const [, year, month, day] = dashedDate;
+
     return `${year}-${month}-${day}`;
   }
 
@@ -68,13 +71,14 @@ const parseKboDate = (value: string): string | null => {
 
   if (compactDate) {
     const [, year, month, day] = compactDate;
+
     return `${year}-${month}-${day}`;
   }
 
   return null;
 };
 
-// collectedAt 기준 한국 날짜를 yyyy-mm-dd 형식으로 만든다.
+// collectedAt 기준 한국 날짜를 yyyy-mm-dd 형식으로 생성
 const formatKstDate = (collectedAt: string): string => {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul",
@@ -84,7 +88,7 @@ const formatKstDate = (collectedAt: string): string => {
   }).format(new Date(collectedAt));
 };
 
-// KBO 스코어보드 HTML에서 날짜 후보 문자열을 찾는다.
+// KBO 스코어보드 HTML에서 날짜 후보 문자열을 탐색
 const findScoreboardDateText = (html: string): string | null => {
   const patterns = [
     /lblGameDate[^>]*>\s*([^<]+)\s*</i,
@@ -108,8 +112,8 @@ const findScoreboardDateText = (html: string): string | null => {
   return null;
 };
 
-// 스코어보드 날짜를 결정한다.
-// HTML에서 날짜를 못 찾으면 Collector 실행 시점의 KST 날짜를 사용한다.
+// 스코어보드 날짜를 결정
+// HTML에서 날짜를 찾지 못하면 Collector 실행 시점의 KST 날짜 사용
 const resolveScoreboardDate = (
   html: string,
   collectedAt: string,
@@ -130,7 +134,7 @@ const resolveScoreboardDate = (
   return fallbackDate;
 };
 
-// 경기별 REVIEW 링크에서 gameId 값을 추출한다.
+// 경기별 REVIEW 링크에서 gameId query parameter를 추출
 const extractSourceGameId = (href: string | undefined): string | null => {
   if (!href) {
     return null;
@@ -145,8 +149,8 @@ const extractSourceGameId = (href: string | undefined): string | null => {
   return decodeURIComponent(matched[1]);
 };
 
-// 내부 gameId는 KBO 페이지의 gameId query parameter를 우선 사용한다.
-// 경기전처럼 gameId가 없으면 날짜와 원정/홈 팀으로 생성한다.
+// KBO 페이지의 gameId를 우선 사용
+// gameId가 없으면 날짜와 원정·홈 팀명으로 내부 식별자 생성
 const createGameId = (
   gameDate: string,
   awayTeam: string,
@@ -160,11 +164,15 @@ const createGameId = (
   return `${gameDate.replaceAll("-", "")}-${awayTeam}-${homeTeam}`;
 };
 
-// 스코어보드의 경기 상태 텍스트를 내부 경기 상태 값으로 변환한다.
+// 스코어보드 경기 상태 텍스트를 내부 상태 값으로 변환
 const parseGameStatus = (value: string): KboGameStatus => {
   const status = normalizeText(value).toUpperCase();
 
-  if (status.includes("FINAL") || status.includes("경기종료") || status === "종료") {
+  if (
+    status.includes("FINAL") ||
+    status.includes("경기종료") ||
+    status === "종료"
+  ) {
     return "FINAL";
   }
 
@@ -176,11 +184,124 @@ const parseGameStatus = (value: string): KboGameStatus => {
     return "SCHEDULED";
   }
 
-  if (status.includes("LIVE") || status.includes("진행") || /\d+회/.test(status)) {
+  if (
+    status.includes("LIVE") ||
+    status.includes("진행") ||
+    /\d+회/.test(status)
+  ) {
     return "LIVE";
   }
 
   return "UNKNOWN";
+};
+
+// "4회말", "5회초" 형식의 상태에서 현재 이닝과 초·말을 추출
+const parseInningState = (
+  rawGameStatus: string,
+): {
+  inning: number | null;
+  inningHalf: "TOP" | "BOTTOM" | null;
+} => {
+  const matched = normalizeText(rawGameStatus).match(/^(\d+)회(초|말)$/);
+
+  if (!matched?.[1] || !matched[2]) {
+    return {
+      inning: null,
+      inningHalf: null,
+    };
+  }
+
+  const inning = Number.parseInt(matched[1], 10);
+
+  if (!Number.isInteger(inning) || inning < 1) {
+    return {
+      inning: null,
+      inningHalf: null,
+    };
+  }
+
+  return {
+    inning,
+    inningHalf: matched[2] === "초" ? "TOP" : "BOTTOM",
+  };
+};
+
+// "3-2 0out" 형식의 문자열에서 볼과 스트라이크 카운트를 추출
+const parseBallStrikeCount = (
+  value: string,
+): {
+  ballCount: number | null;
+  strikeCount: number | null;
+} => {
+  const normalized = normalizeText(value);
+  const matched = normalized.match(/^(\d+)\s*-\s*(\d+)/);
+
+  if (!matched?.[1] || !matched[2]) {
+    return {
+      ballCount: null,
+      strikeCount: null,
+    };
+  }
+
+  const ballCount = Number.parseInt(matched[1], 10);
+  const strikeCount = Number.parseInt(matched[2], 10);
+
+  if (
+    !Number.isInteger(ballCount) ||
+    !Number.isInteger(strikeCount) ||
+    ballCount < 0 ||
+    ballCount > 3 ||
+    strikeCount < 0 ||
+    strikeCount > 2
+  ) {
+    return {
+      ballCount: null,
+      strikeCount: null,
+    };
+  }
+
+  return {
+    ballCount,
+    strikeCount,
+  };
+};
+
+// .base p 내부 span 값에서 현재 아웃카운트를 추출
+// 야구 아웃카운트는 0, 1, 2만 허용
+const parseOutCount = (value: string): number | null => {
+  const outCount = parseNullableNumber(value);
+
+  if (
+    outCount === null ||
+    !Number.isInteger(outCount) ||
+    outCount < 0 ||
+    outCount > 2
+  ) {
+    return null;
+  }
+
+  return outCount;
+};
+
+// base_on 이미지 여부로 각 루의 주자 점유 상태를 판단
+const parseBaseState = (
+  firstBaseImageSrc: string,
+  secondBaseImageSrc: string,
+  thirdBaseImageSrc: string,
+): BaseState | null => {
+  const hasBaseElement = Boolean(
+    firstBaseImageSrc || secondBaseImageSrc || thirdBaseImageSrc,
+  );
+
+  if (!hasBaseElement) {
+    return null;
+  }
+
+  return {
+    first: firstBaseImageSrc.includes("base_on"),
+    second: secondBaseImageSrc.includes("base_on"),
+    third: thirdBaseImageSrc.includes("base_on"),
+  };
 };
 
 // place 텍스트에서 구장과 경기 시간을 분리
@@ -210,41 +331,8 @@ const parseLocalTime = (
   };
 };
 
-// 승/패/세 또는 W/L/S prefix를 제거한다.
-const removePitcherPrefix = (value: string): string | null => {
-  const normalized = normalizeText(value);
-
-  if (!normalized) {
-    return null;
-  }
-
-  const withoutPrefix = normalized
-    .replace(/^(승|패|세|W|L|S)\s*[:：]\s*/i, "")
-    .trim();
-
-  return withoutPrefix || null;
-};
-
-// p.win 내부 span 목록에서 승리/패전/세이브 투수 텍스트를 찾는다.
-const findPitcherTextByPrefixes = (
-  pitcherTexts: string[],
-  prefixes: string[],
-): string | null => {
-  const found = pitcherTexts.find((pitcherText) => {
-    const normalized = normalizeText(pitcherText);
-
-    return prefixes.some((prefix) => normalized.startsWith(prefix));
-  });
-
-  if (!found) {
-    return null;
-  }
-
-  return removePitcherPrefix(found);
-};
-
 // KBO HTML 조회
-// 실제 URL은 kboConfig.ts에서 읽어온 값을 호출부에서 넘긴다.
+// 실제 URL은 kboConfig.ts의 환경 변수 설정값을 사용
 const fetchHtml = async (url: string): Promise<string> => {
   const response = await fetch(url, {
     headers: {
@@ -262,8 +350,8 @@ const fetchHtml = async (url: string): Promise<string> => {
 };
 
 // 스코어보드 테이블의 한 팀 row를 KboTeamLineScore로 변환
-// KBO tScore는 마지막 4개 td를 R/H/E/B로 사용한다.
-// 경기전 상태에서는 R/H/E/B가 비어 있으므로 runs는 0으로 처리한다.
+// KBO tScore는 마지막 4개 td를 R·H·E·B로 사용
+// 경기전 상태에서는 빈 runs 값을 0으로 처리
 const parseLineScore = (
   team: string,
   cells: string[],
@@ -325,47 +413,46 @@ const parseScoreboard = (
     const awayScoreText =
       normalizeText(scoreWrap.find(".leftTeam .score span").first().text()) ||
       normalizeText(scoreWrap.find(".leftTeam .score").first().text()) ||
-      normalizeText(gameBlock.find("span[id*='lblAwayTeamScore']").first().text());
+      normalizeText(
+        gameBlock.find("span[id*='lblAwayTeamScore']").first().text(),
+      );
 
     const homeScoreText =
       normalizeText(scoreWrap.find(".rightTeam .score span").first().text()) ||
       normalizeText(scoreWrap.find(".rightTeam .score").first().text()) ||
-      normalizeText(gameBlock.find("span[id*='lblHomeTeamScore']").first().text());
+      normalizeText(
+        gameBlock.find("span[id*='lblHomeTeamScore']").first().text(),
+      );
 
     const awayScoreFromHeader = parseNullableNumber(awayScoreText);
     const homeScoreFromHeader = parseNullableNumber(homeScoreText);
 
-    const gameStatus = parseGameStatus(scoreWrap.find(".flag").first().text());
+    const rawGameStatus = normalizeText(
+      scoreWrap.find(".flag").first().text(),
+    );
+
+    const gameStatus = parseGameStatus(rawGameStatus);
+    const { inning, inningHalf } = parseInningState(rawGameStatus);
+
+    const baseElement = scoreWrap.find(".base").first();
+    const countText = normalizeText(baseElement.find("p").first().text());
+
+    const { ballCount, strikeCount } =
+      parseBallStrikeCount(countText);
+
+    const outCount = parseOutCount(
+      baseElement.find("p span").last().text(),
+    );
+
+    const baseState = parseBaseState(
+      baseElement.find(".base1 img").attr("src") ?? "",
+      baseElement.find(".base2 img").attr("src") ?? "",
+      baseElement.find(".base3 img").attr("src") ?? "",
+    );
 
     const { stadium, gameTime } = parseLocalTime(
       gameBlock.find(".place").first().text(),
     );
-
-    const pitcherTexts = gameBlock
-      .find(".win span")
-      .toArray()
-      .map((pitcherText) => normalizeText($(pitcherText).text()));
-
-    const winningPitcherText = findPitcherTextByPrefixes(pitcherTexts, [
-      "승:",
-      "승：",
-      "W:",
-      "W：",
-    ]);
-
-    const losingPitcherText = findPitcherTextByPrefixes(pitcherTexts, [
-      "패:",
-      "패：",
-      "L:",
-      "L：",
-    ]);
-
-    const savePitcherText = findPitcherTextByPrefixes(pitcherTexts, [
-      "세:",
-      "세：",
-      "S:",
-      "S：",
-    ]);
 
     const sourceGameId = extractSourceGameId(
       gameBlock.find(".btnSms a[href*='gameId=']").first().attr("href"),
@@ -443,9 +530,12 @@ const parseScoreboard = (
       awayLineScore,
       homeLineScore,
       gameStatus,
-      winningPitcherText,
-      losingPitcherText,
-      savePitcherText,
+      inning,
+      inningHalf,
+      ballCount,
+      strikeCount,
+      outCount,
+      baseState,
       collectedAt,
     });
   });
@@ -458,8 +548,8 @@ const parseTeamRank = (html: string): KboTeamRank[] => {
   const $ = load(html);
   const teamRanks: KboTeamRank[] = [];
 
-  // 팀 순위 페이지에는 팀 순위표와 팀간 승패표가 모두 table.tData로 존재한다.
-  // summary에 순위/팀명/승률이 들어간 팀 순위표만 사용한다.
+  // 팀 순위 페이지에는 팀 순위표와 팀간 승패표가 모두 table.tData로 존재
+  // summary에 순위·팀명·승률이 들어간 팀 순위표만 사용
   const teamRankTable = $("table.tData")
     .filter((_index, element) => {
       const summary = normalizeText($(element).attr("summary") ?? "");
@@ -474,6 +564,7 @@ const parseTeamRank = (html: string): KboTeamRank[] => {
 
   if (teamRankTable.length === 0) {
     console.warn("[kbo-collector] team rank table not found");
+
     return teamRanks;
   }
 
@@ -578,7 +669,10 @@ const createScoreEvent = (
     ? currentGame.awayScore
     : currentGame.homeScore;
 
-  const scoringTeam = isAwayScored ? currentGame.awayTeam : currentGame.homeTeam;
+  const scoringTeam = isAwayScored
+    ? currentGame.awayTeam
+    : currentGame.homeTeam;
+
   const scoreDiff = currentScore - previousScore;
 
   const inning = isAwayScored
@@ -605,7 +699,7 @@ const createScoreEvent = (
     awayTeam: currentGame.awayTeam,
     homeScore: currentGame.homeScore,
     awayScore: currentGame.awayScore,
-    outCount: null,
+    outCount: currentGame.outCount,
     eventType: "SCORE",
     message: `${scoringTeam} ${scoreDiff}득점, 현재 ${currentGame.awayTeam} ${currentGame.awayScore} - ${currentGame.homeScore} ${currentGame.homeTeam}`,
     timestamp: new Date().toISOString(),
@@ -649,7 +743,7 @@ const createErrorEvent = (error: unknown): GameEvent => {
   };
 };
 
-// 이전 스코어보드 상태와 현재 상태를 비교해 GameEvent 목록 생성
+// 이전 스코어보드와 현재 스코어보드를 비교해 GameEvent 목록 생성
 const createGameEventsFromScoreboardGames = (
   currentGames: KboScoreboardGame[],
 ): GameEvent[] => {
@@ -660,6 +754,7 @@ const createGameEventsFromScoreboardGames = (
 
     if (!previousGame) {
       previousScoreboardGames.set(currentGame.gameId, currentGame);
+
       continue;
     }
 
@@ -687,7 +782,6 @@ const createGameEventsFromScoreboardGames = (
 // KBO 스코어보드와 팀 순위를 한 번 수집
 export const collectKboData = async (): Promise<KboCollectedData> => {
   const { scoreboardUrl, teamRankUrl } = getKboCollectorConfig();
-
   const collectedAt = new Date().toISOString();
 
   const scoreboardHtml = await fetchHtml(scoreboardUrl);
@@ -697,6 +791,7 @@ export const collectKboData = async (): Promise<KboCollectedData> => {
 
   try {
     const teamRankHtml = await fetchHtml(teamRankUrl);
+
     teamRanks = parseTeamRank(teamRankHtml);
   } catch (error) {
     console.error("[kbo-collector] failed to collect team ranks", error);
@@ -721,6 +816,7 @@ export const collectAndPublishKboEvents =
       console.error("[kbo-collector] failed to collect scoreboard", error);
 
       await publishGameEvent(createErrorEvent(error));
+
       return null;
     }
 

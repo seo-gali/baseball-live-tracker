@@ -6,6 +6,18 @@ export type KboGameStatus =
   | "CANCELED"
   | "UNKNOWN";
 
+// 진행 중 경기의 주자 점유 상태
+export type BaseState = {
+  // 1루 주자 여부
+  first: boolean;
+
+  // 2루 주자 여부
+  second: boolean;
+
+  // 3루 주자 여부
+  third: boolean;
+};
+
 // 한 팀의 이닝별 점수와 R / H / E / B 값을 표현하는 구조
 export type KboTeamLineScore = {
   // 팀명
@@ -66,17 +78,26 @@ export type KboScoreboardGame = {
   // 경기 상태
   gameStatus: KboGameStatus;
 
-  // 승리 투수 텍스트
-  // 스코어보드에 없으면 null
-  winningPitcherText: string | null;
+  // 진행 중 경기의 현재 이닝
+  // 경기전, 경기 종료 또는 파싱할 수 없으면 null
+  inning: number | null;
 
-  // 패전 투수 텍스트
-  // 스코어보드에 없으면 null
-  losingPitcherText: string | null;
+  // 초: TOP, 말: BOTTOM
+  // 경기전, 경기 종료 또는 파싱할 수 없으면 null
+  inningHalf: "TOP" | "BOTTOM" | null;
 
-  // 세이브 투수 텍스트
-  // 세이브가 없거나 스코어보드에 없으면 null
-  savePitcherText: string | null;
+  // 현재 볼카운트
+  ballCount: number | null;
+
+  // 현재 스트라이크카운트
+  strikeCount: number | null;
+
+  // 현재 아웃카운트
+  outCount: number | null;
+
+  // 현재 주자 점유 상태
+  // 진행 중 경기에서 base 영역을 확인할 수 없으면 null
+  baseState: BaseState | null;
 
   // 수집 시각
   collectedAt: string;

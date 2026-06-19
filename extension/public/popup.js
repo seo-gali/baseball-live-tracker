@@ -62,8 +62,13 @@ const dom = {
   gameTime: document.querySelector("#game-time"),
 
   battingTeam: document.querySelector("#batting-team"),
+  ballStrikeCount: document.querySelector("#ball-strike-count"),
   outCount: document.querySelector("#out-count"),
+
   baseState: document.querySelector("#base-state"),
+  firstBase: document.querySelector('[data-base="first"]'),
+  secondBase: document.querySelector('[data-base="second"]'),
+  thirdBase: document.querySelector('[data-base="third"]'),
 
   selectedRank: document.querySelector("#selected-rank"),
   selectedRecord: document.querySelector("#selected-record"),
@@ -147,28 +152,54 @@ const getBattingTeam = (game) => {
   return null;
 };
 
-// 주자 상황 표시값 생성
-const formatBaseState = (baseState) => {
-  if (!baseState) {
-    return "-";
+// 주자 점유 상태에 따라 각 루 다이아몬드의 색상을 갱신
+const renderBaseState = (baseState) => {
+  const hasBaseState = Boolean(baseState);
+
+  dom.baseState.classList.toggle("unknown", !hasBaseState);
+
+  dom.firstBase.classList.toggle(
+    "occupied",
+    Boolean(baseState?.first),
+  );
+
+  dom.secondBase.classList.toggle(
+    "occupied",
+    Boolean(baseState?.second),
+  );
+
+  dom.thirdBase.classList.toggle(
+    "occupied",
+    Boolean(baseState?.third),
+  );
+
+  if (!hasBaseState) {
+    dom.baseState.setAttribute("aria-label", "주자 정보 없음");
+    return;
   }
 
-  const bases = [];
+  const occupiedBases = [];
 
   if (baseState.first) {
-    bases.push("1루");
+    occupiedBases.push("1루");
   }
 
   if (baseState.second) {
-    bases.push("2루");
+    occupiedBases.push("2루");
   }
 
   if (baseState.third) {
-    bases.push("3루");
+    occupiedBases.push("3루");
   }
 
-  return bases.length > 0 ? bases.join(" / ") : "없음";
+  dom.baseState.setAttribute(
+    "aria-label",
+    occupiedBases.length > 0
+      ? `주자 ${occupiedBases.join(", ")}`
+      : "주자 없음",
+  );
 };
+
 
 // localStorage에서 선택 팀 값 읽어오기
 // 새 key가 없으면 기존 key를 한 번 읽어서 마이그레이션
@@ -245,8 +276,10 @@ const renderEmptyGame = (statusText = "수집 대기") => {
   dom.gameTime.textContent = "-";
 
   dom.battingTeam.textContent = "-";
+  dom.ballStrikeCount.textContent = "-";
   dom.outCount.textContent = "-";
-  dom.baseState.textContent = "-";
+
+  renderBaseState(null);
 };
 
 // 순위 정보가 아직 없을 때 순위 영역을 초기 상태로 생성
@@ -288,6 +321,18 @@ const findSelectedRank = (teamRanks, selectedTeam) => {
   );
 };
 
+// 볼과 스트라이크 값이 모두 있으면 "3-2" 형식으로 표시
+const formatBallStrikeCount = (game) => {
+  if (
+    !Number.isInteger(game?.ballCount) ||
+    !Number.isInteger(game?.strikeCount)
+  ) {
+    return "-";
+  }
+
+  return `${game.ballCount}-${game.strikeCount}`;
+};
+
 // 선택 팀이 포함된 경기 정보를 화면에 표시
 const renderSelectedGame = (game) => {
   showSelectedTeamView();
@@ -310,12 +355,18 @@ const renderSelectedGame = (game) => {
   dom.gameTime.textContent = game.gameTime || "-";
 
   const battingTeam = getBattingTeam(game);
+
   dom.battingTeam.textContent = battingTeam || "-";
 
-  dom.outCount.textContent =
-    Number.isInteger(game.outCount) ? `${game.outCount} Out` : "-";
+  dom.ballStrikeCount.textContent =
+    formatBallStrikeCount(game);
 
-  dom.baseState.textContent = formatBaseState(game.baseState);
+  dom.outCount.textContent =
+    Number.isInteger(game.outCount)
+      ? `${game.outCount} Out`
+      : "-";
+
+  renderBaseState(game.baseState);
 };
 
 // 선택 팀의 시즌 순위 정보를 화면에 표시
@@ -424,12 +475,11 @@ const applyGameEventToLatestSnapshot = (event) => {
           : event.gameStatus ?? game.gameStatus,
       inning: event.inning ?? game.inning,
       inningHalf: event.inningHalf ?? game.inningHalf,
-      battingTeam: event.battingTeam ?? game.battingTeam,
       outCount: event.outCount ?? game.outCount,
-      baseState: event.baseState ?? game.baseState,
     };
   });
 };
+
 
 // Popup에서 선택한 응원 팀을 WebSocket Server에 전달
 // 선택 팀이 없는 경우 빈 문자열을 전송

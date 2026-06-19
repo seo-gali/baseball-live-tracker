@@ -5,12 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Baseball Live Tracker</title>
     <link rel="stylesheet" href="./popup.css" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
-      rel="stylesheet"
-    />
   </head>
+
   <body>
     <main class="popup">
       <section class="header">
@@ -34,7 +30,15 @@
 
       <section class="game-summary">
         <div class="summary-top">
-          <span id="game-status">수집 대기</span>
+          <div class="summary-status">
+            <span id="game-status">대기</span>
+
+            <span class="game-location">
+              <span id="stadium">-</span>
+              <span id="game-time">-</span>
+            </span>
+          </div>
+
           <span id="game-date">-</span>
         </div>
 
@@ -52,23 +56,49 @@
           </div>
         </div>
 
-        <div class="summary-bottom">
-          <span id="stadium">-</span>
-          <span id="game-time">-</span>
-        </div>
-
         <div class="game-detail">
           <div>
             <span class="label">공격 팀</span>
             <strong id="batting-team">-</strong>
           </div>
+
           <div>
-            <span class="label">아웃카운트</span>
-            <strong id="out-count">-</strong>
+            <span class="label">카운트</span>
+
+            <strong class="count-state">
+              <span id="ball-strike-count">-</span>
+              <span class="count-divider">/</span>
+              <span id="out-count">-</span>
+            </strong>
           </div>
+
           <div>
             <span class="label">주자</span>
-            <strong id="base-state">-</strong>
+
+            <div
+              id="base-state"
+              class="base-indicator unknown"
+              role="img"
+              aria-label="주자 정보 없음"
+            >
+              <span
+                class="base-marker base-second"
+                data-base="second"
+                aria-hidden="true"
+              ></span>
+
+              <span
+                class="base-marker base-third"
+                data-base="third"
+                aria-hidden="true"
+              ></span>
+
+              <span
+                class="base-marker base-first"
+                data-base="first"
+                aria-hidden="true"
+              ></span>
+            </div>
           </div>
         </div>
       </section>
@@ -78,10 +108,12 @@
           <span class="label">팀 순위</span>
           <strong id="selected-rank">-</strong>
         </div>
+
         <div>
           <span class="label">시즌 성적</span>
           <strong id="selected-record">-</strong>
         </div>
+
         <div>
           <span class="label">승률 / 게임차</span>
           <strong id="selected-rate">-</strong>
@@ -90,8 +122,9 @@
 
       <section id="game-list-section" class="game-list-section hidden">
         <h2>전체 경기</h2>
+
         <ul id="game-list" class="game-list">
-          <li class="empty-text">수집 대기</li>
+          <li class="empty-text">대기</li>
         </ul>
       </section>
 
